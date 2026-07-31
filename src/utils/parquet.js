@@ -1,6 +1,12 @@
 import { asyncBufferFromUrl, parquetMetadataAsync, parquetRead, parquetReadObjects, parquetSchema } from 'hyparquet';
 import { compressors } from 'hyparquet-compressors';
 import {
+  createDomainGuard,
+  createLonLatTransform,
+  MAP_RENDERABLE_CRS,
+  reprojectGeometry,
+} from './crs.js';
+import {
   isParquetAsset,
   MAX_MAP_FEATURES,
   MAX_MAP_PARQUET_BYTES,
@@ -10,14 +16,14 @@ import {
 } from './parquetShared.js';
 
 export { isParquetAsset, MAX_MAP_FEATURES, MAX_MAP_PARQUET_BYTES, MAX_ROWS };
+// Re-exported so callers (and tests) can reach the CRS layer through the
+// loader they already import.
+export { createDomainGuard, createLonLatTransform, reprojectGeometry };
 
-// Coordinate reference systems we can put on the map without reprojection.
-// `null` means the file declares no CRS at all — GeoParquet's default is then
-// OGC:CRS84 (lon/lat), which is renderable. A *declared* CRS must identify
-// itself as one of the lon/lat systems below; anything else — including
-// PROJJSON without a recognizable authority/code — is rejected for map
-// display (see detectGeometryInfo).
-const MAP_RENDERABLE_CRS = [null, 'OGC:CRS84', 'EPSG:4326'];
+// How long the reprojection loop may hold the main thread before yielding.
+// One frame at 60 Hz: long enough that the yields cost little, short enough
+// that the page keeps painting.
+const REPROJECT_YIELD_MS = 16;
 
 // Promise wrapper around hyparquet's callback-style parquetRead, preserving
 // its default (array) row format. The object-format path uses hyparquet's own
@@ -315,10 +321,16 @@ export async function loadParquetMetadata(url, { signal } = {}) {
  * column, a CRS the map can't display, raw (undecoded) geometry bytes, or on
  * fetch/parse errors. An optional `signal` (AbortSignal) is forwarded to
  * every fetch hyparquet issues; aborting rejects with an `AbortError`.
+ *
+ * Geometries in a projected CRS are reprojected to lon/lat on the way out
+ * (`reprojectedFrom` names the source CRS when that happened). Features whose
+ * coordinates fall outside the transform's domain are dropped and counted in
+ * `droppedFeatures` rather than drawn in the wrong place.
  */
 export async function loadGeoJsonFromParquet(url, { signal } = {}) {
   const maxFeatures = MAX_MAP_FEATURES;
-  const { file, metadata, totalRows, geometryColumn, crs } = await loadParquetMetadata(url, { signal });
+  const { file, metadata, totalRows, geometryColumn, crs, crsDefinition } =
+    await loadParquetMetadata(url, { signal });
 
   // Authoritative size gate on the *actual* byte length (from the HEAD/range
   // probe in asyncBufferFromUrl), not the self-declared STAC `file:size`.
@@ -328,9 +340,17 @@ export async function loadGeoJsonFromParquet(url, { signal } = {}) {
   if (!geometryColumn) {
     throw new Error('Parquet file has no geometry column');
   }
-  if (!MAP_RENDERABLE_CRS.includes(crs)) {
+  // A projected (or otherwise non-lon/lat) CRS is reprojected rather than
+  // refused — but only if proj4 can resolve it from the file's own PROJJSON
+  // or its authority code. When it can't, the geometries would land in the
+  // Atlantic near 0°/0°, so refusing is still the right answer.
+  const transform = MAP_RENDERABLE_CRS.includes(crs)
+    ? null
+    : createLonLatTransform(crs, crsDefinition);
+  if (!MAP_RENDERABLE_CRS.includes(crs) && !transform) {
     throw new Error(`GeoParquet CRS ${crs} is not supported for map display`);
   }
+  const guard = transform ? createDomainGuard(crs, crsDefinition) : null;
   if (totalRows > maxFeatures) {
     return { exceeded: true, reason: VECTOR_NOTICE_TOO_LARGE, totalRows };
   }
@@ -359,16 +379,36 @@ export async function loadGeoJsonFromParquet(url, { signal } = {}) {
   }
 
   const features = [];
+  let droppedFeatures = 0;
+  let lastYield = Date.now();
   for (const row of rows) {
     // Belt-and-braces: never build more than maxFeatures features, whatever
     // the reader delivered.
     if (features.length >= maxFeatures) {break;}
-    const geometry = row[geometryColumn];
-    if (geometry === null || geometry === undefined) {continue;}
-    if (geometry instanceof Uint8Array || geometry instanceof ArrayBuffer) {
+    // Reprojection is a per-position proj4 call, so a file near the byte cap
+    // is seconds of work. Hand the event loop back periodically so the page
+    // stays responsive and an abort can still interrupt us. Files that aren't
+    // reprojected never reach the yield, and neither do small ones.
+    if (transform && Date.now() - lastYield >= REPROJECT_YIELD_MS) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      if (signal?.aborted) {
+        const err = new Error('Aborted');
+        err.name = 'AbortError';
+        throw err;
+      }
+      lastYield = Date.now();
+    }
+    const raw = row[geometryColumn];
+    if (raw === null || raw === undefined) {continue;}
+    if (raw instanceof Uint8Array || raw instanceof ArrayBuffer) {
       // hyparquet only leaves raw WKB when the column wasn't marked as a
       // geometry column, i.e. the file lacks GeoParquet `geo` metadata.
       throw new Error('Geometry column was not decoded (missing GeoParquet metadata)');
+    }
+    const geometry = transform ? reprojectGeometry(raw, transform, guard) : raw;
+    if (geometry === null) {
+      droppedFeatures++;
+      continue;
     }
     // Properties are intentionally empty: attribute columns are pruned from
     // the read above (see the `columns` option).
@@ -379,6 +419,8 @@ export async function loadGeoJsonFromParquet(url, { signal } = {}) {
     exceeded: false,
     featureCollection: { type: 'FeatureCollection', features },
     totalRows,
+    reprojectedFrom: transform ? crs : null,
+    droppedFeatures,
   };
 }
 

@@ -641,6 +641,89 @@ describe('StacMapLayer', () => {
       expect(notices).toEqual([null, { format: 'geoparquet', reason: 'error' }])
     })
 
+    it('renders the survivors and warns when reprojection dropped some features', async () => {
+      injectParquetDeps(layer, () => ({
+        exceeded: false,
+        featureCollection: FEATURE_COLLECTION,
+        totalRows: 4,
+        reprojectedFrom: 'EPSG:28992',
+        droppedFeatures: 3,
+      }))
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        await layer.setAssets([parquetAsset()])
+        // Asserted before mockRestore(), which clears the recorded calls.
+        expect(warn).toHaveBeenCalledWith(expect.stringMatching(/Dropped 3 feature\(s\).*EPSG:28992/))
+      } finally {
+        warn.mockRestore()
+      }
+      // Partial data still renders — and without an error banner over it.
+      expect(map.sources.has('stac-parquet-0')).toBe(true)
+      expect(notices).toEqual([null])
+    })
+
+    it('reports an error instead of an empty map when nothing survived reprojection', async () => {
+      injectParquetDeps(layer, () => ({
+        exceeded: false,
+        featureCollection: { type: 'FeatureCollection', features: [] },
+        totalRows: 3,
+        reprojectedFrom: 'EPSG:28992',
+        droppedFeatures: 3,
+      }))
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        await layer.setAssets([parquetAsset()])
+      } finally {
+        warn.mockRestore()
+      }
+
+      expect(map.sources.has('stac-parquet-0')).toBe(false)
+      // Not `error`: the file downloaded and parsed fine, so the notice has to
+      // say the coordinates could not be placed rather than blame the load.
+      expect(notices).toEqual([
+        null,
+        { format: 'geoparquet', reason: 'reprojection', crs: 'EPSG:28992' },
+      ])
+    })
+
+    it('warns about dropped features once, not again on every basemap switch', async () => {
+      injectParquetDeps(layer, () => ({
+        exceeded: false,
+        featureCollection: FEATURE_COLLECTION,
+        totalRows: 4,
+        reprojectedFrom: 'EPSG:28992',
+        droppedFeatures: 3,
+      }))
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        await layer.setAssets([parquetAsset()])
+        await layer.readdAfterStyleChange()
+        await layer.readdAfterStyleChange()
+        const dropWarns = warn.mock.calls.filter(([msg]) => typeof msg === 'string' && msg.includes('Dropped 3 feature(s)'))
+        expect(dropWarns).toHaveLength(1)
+      } finally {
+        warn.mockRestore()
+      }
+    })
+
+    it('does not warn when nothing was dropped', async () => {
+      injectParquetDeps(layer, () => ({
+        exceeded: false,
+        featureCollection: FEATURE_COLLECTION,
+        totalRows: 1,
+        reprojectedFrom: 'EPSG:28992',
+        droppedFeatures: 0,
+      }))
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        await layer.setAssets([parquetAsset()])
+        const dropWarns = warn.mock.calls.filter(([msg]) => typeof msg === 'string' && msg.includes('Dropped'))
+        expect(dropWarns).toHaveLength(0)
+      } finally {
+        warn.mockRestore()
+      }
+    })
+
     it('survives a basemap change without duplicating the source', async () => {
       injectParquetDeps(layer, () => ({ exceeded: false, featureCollection: FEATURE_COLLECTION, totalRows: 1 }))
       await layer.setAssets([parquetAsset()])
