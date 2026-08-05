@@ -65,6 +65,26 @@ export default {
       }
     },
 
+    // Basemap swaps to a style OBJECT — the raster Imagery basemap — must be
+    // full style loads (`diff: false`). MapLibre's default diff-based setStyle
+    // silently skips the `style.load` event when it can patch the current
+    // style in place, which is exactly what happens for an object style: the
+    // diff also strips our imperatively-added data layers (they are not part
+    // of the new style document), so nothing re-adds them and the map shows
+    // bare imagery with the data gone. Forcing a full load guarantees
+    // `style.load` fires, after which onBasemapChanged() re-adds every data
+    // layer on top of the fresh raster.
+    //
+    // URL styles (Positron/Dark Matter) keep the default: their fetch + diff
+    // already ends in a full rebuild that fires `style.load` (different
+    // sources/sprite/glyphs are not diffable), and forcing `diff: false` on
+    // them would tear the current style down for the whole network fetch — a
+    // window in which any concurrent addLayer throws "Style is not done
+    // loading".
+    _setBasemapStyle(style) {
+      this.map.setStyle(style, { diff: typeof style === 'string' });
+    },
+
     _loadBasemapAsync(basemap) {
       const style = basemap.raster ? this.buildRasterStyle(basemap) : basemap.url;
       if (!style) {return;}
@@ -80,7 +100,7 @@ export default {
           Promise.resolve(this.onBasemapChanged()).catch(console.warn);
         }
       });
-      this.map.setStyle(style);
+      this._setBasemapStyle(style);
     },
 
     buildRasterStyle(basemap) {
@@ -111,7 +131,7 @@ export default {
       const was3D = this.is3D;
 
       const style = basemap.raster ? this.buildRasterStyle(basemap) : basemap.url;
-      this.map.setStyle(style);
+      this._setBasemapStyle(style);
 
       await new Promise(resolve => { this.map.once('style.load', resolve); });
 
