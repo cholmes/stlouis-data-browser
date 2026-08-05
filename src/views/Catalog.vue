@@ -1,10 +1,10 @@
 <template>
   <div :class="{cc: true, [cssStacType]: true, empty: !hasCatalogs && !hasItems}" :key="data.id">
-    <!-- The root catalog gets the portal-style home. It leads with the
-         browse grid: hero above, then the grid (the row below), then the
-         stats/department/tag sections (the second StlHome instance after the
-         row). The generic meta column is hidden in its favour. -->
-    <StlHome v-if="isRoot" section="hero" />
+    <!-- The root catalog gets the portal-style home: hero, Quick Stats and
+         the department chips above the browse grid (the row below), then the
+         tag cloud after it (the second StlHome instance). The generic meta
+         column is hidden in its favour. -->
+    <StlHome v-if="isRoot" section="top" />
     <!-- Department sub-catalogs get the home view's Quick Stats treatment,
          scaled down and computed from their child collections. -->
     <StlCatalogStats v-if="!isRoot && !isCollection && catalogs.length > 0" />
@@ -80,7 +80,7 @@
         <WidgetHook id="view-catalog-items-end" />
       </b-col>
     </b-row>
-    <StlHome v-if="isRoot" section="facets" />
+    <StlHome v-if="isRoot" section="tags" />
   </div>
 </template>
 

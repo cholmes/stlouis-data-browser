@@ -81,13 +81,12 @@ await page.screenshot({ path: `${OUT}/stl-01-root.png` });
 // ---------- 2. Header branding ----------
 const header = await page.evaluate(() => {
   const bar = document.querySelector('.stl-bar');
-  const band = document.querySelector('.stl-band');
   const menu = document.querySelector('.stl-menu');
   const brand = document.querySelector('.stl-brand');
   const cs = e => e && getComputedStyle(e);
   return {
     barBg: cs(document.querySelector('.stl-header'))?.backgroundColor,
-    bandBg: cs(band)?.backgroundColor,
+    bandCount: document.querySelectorAll('.stl-band').length,
     menuBg: cs(menu)?.backgroundColor,
     brandColor: cs(brand)?.color,
     font: cs(brand)?.fontFamily,
@@ -99,8 +98,9 @@ const header = await page.evaluate(() => {
   };
 });
 check('header bar is white', header.barBg === 'rgb(255, 255, 255)', header.barBg);
-check('accent band blue is #1E526B', header.bandBg === 'rgb(30, 82, 107)', header.bandBg);
-check('MENU red is #C03221', header.menuBg === 'rgb(192, 50, 33)', header.menuBg);
+// One white strip, like the city's own header — no second coloured band.
+check('single bar, no accent band', header.bandCount === 0, `${header.bandCount} bands`);
+check('BROWSE button blue is #1E526B', header.menuBg === 'rgb(30, 82, 107)', header.menuBg);
 check('wordmark blue is #1E526B', header.brandColor === 'rgb(30, 82, 107)', header.brandColor);
 check('Open Sans applied to wordmark', /Open Sans/.test(header.font || ''), header.font);
 // startsWith: innerText also picks up the visually-hidden accessibility label.
@@ -108,6 +108,13 @@ check('wordmark reads STLOUIS-MOGOV', header.brandText?.startsWith('STLOUIS-MOGO
 check('STLOUIS is bold', header.strongWeight === '700', header.strongWeight);
 check('fleur-de-lis asset referenced', !!header.fleurSrc && header.fleurSrc.includes('fleur-de-lis.svg'), header.fleurSrc);
 check('no horizontal overflow', header.hOverflow === 0, `${header.hOverflow}px`);
+
+// The city's own submit button turns red on hover; BROWSE copies it.
+await page.hover('.stl-menu');
+const menuHoverBg = await page.evaluate(
+  () => getComputedStyle(document.querySelector('.stl-menu')).backgroundColor);
+check('BROWSE hover red is #A61C00', menuHoverBg === 'rgb(166, 28, 0)', menuHoverBg);
+await page.mouse.move(0, 0);
 
 // ---------- 2a. Typography and palette ----------
 const type = await page.evaluate(() => {

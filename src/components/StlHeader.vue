@@ -9,10 +9,6 @@
         <span class="visually-hidden">{{ catalogTitle }}</span>
       </router-link>
 
-      <span class="stl-tagline" aria-hidden="true">Open Data — Cloud-Native Mirror</span>
-    </div>
-
-    <div class="stl-band">
       <nav class="stl-actions">
         <router-link v-if="canSearch" :to="searchLink" class="stl-link" :class="{ active: isSearchPage }">
           <b-icon-search /><span class="stl-link-label">{{ $t('search.title') }}</span>
@@ -129,8 +125,7 @@ export default {
   background-color: white;
 }
 
-.stl-bar,
-.stl-actions {
+.stl-bar {
   margin-inline: auto;
 
   @include media-breakpoint-up(xxxl) {
@@ -138,8 +133,8 @@ export default {
   }
 }
 
-// The white bar: the stlouis-mo.gov wordmark on the left, the site's role on
-// the right.
+// The white bar: the stlouis-mo.gov wordmark on the left, the browser's
+// actions on the right — one strip, as on the city's own pages.
 .stl-bar {
   display: flex;
   align-items: center;
@@ -181,43 +176,24 @@ export default {
   margin: 0 0.06em -0.04em;
 }
 
-.stl-tagline {
-  margin-left: auto;
-  color: $stl-slate;
-  font-size: 0.85rem;
-  font-style: italic;
-  white-space: nowrap;
-
-  @include media-breakpoint-down(md) {
-    display: none;
-  }
-}
-
-// The dark blue band beneath the white bar, echoing stlouis-mo.gov's hero and
-// nav band. It carries the browser's actions.
-.stl-band {
-  background-color: $stl-blue;
-}
-
 .stl-actions {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   justify-content: flex-end;
-  gap: 0.25rem;
-  height: $stl-band-height;
-  padding-inline: $block-gap;
+  gap: 0.5rem;
+  margin-left: auto;
 }
 
-// Band links are flat white text rather than Bootstrap buttons — the band
-// supplies the colour, so a button variant on top of it just adds noise.
+// Secondary actions are flat blue text on the white bar; only BROWSE reads as
+// a button, the way the city's own header leads with its one filled control.
 .stl-link {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0 0.85rem;
+  padding: 0.35rem 0.7rem;
   border: 0;
   background: none;
-  color: rgba(255, 255, 255, 0.92);
+  color: $stl-blue;
   font-size: 0.95rem;
   font-weight: 600;
   text-decoration: none;
@@ -225,14 +201,13 @@ export default {
 
   &:hover,
   &:focus {
-    color: white;
-    background-color: rgba(255, 255, 255, 0.12);
+    color: $stl-red-dark;
     text-decoration: none;
   }
 
   &.active {
-    color: white;
-    box-shadow: inset 0 -3px 0 $stl-light-blue;
+    color: $stl-blue-dark;
+    box-shadow: inset 0 -3px 0 $stl-blue;
   }
 
   @include media-breakpoint-down(md) {
@@ -244,14 +219,14 @@ export default {
 
 // The BROWSE button copies stlouis-mo.gov's own Search button treatment
 // (screen.css `.site-search input[type="submit"]`): the city's dark blue at
-// rest — flat against the band, as the city's nav buttons sit flat until
-// hovered — turning the hover red with white text.
+// rest, turning red with white text on hover.
 .stl-menu {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0 1.5rem;
+  padding: 0.45rem 1.35rem;
   border: 0;
+  border-radius: $border-radius;
   background-color: $stl-blue;
   color: white;
   font-size: 0.95rem;
@@ -273,7 +248,7 @@ export default {
   }
 
   @include media-breakpoint-down(sm) {
-    padding: 0 1rem;
+    padding: 0.45rem 0.8rem;
 
     .stl-menu-label {
       display: none;
@@ -282,20 +257,18 @@ export default {
 }
 
 // The language dropdown is the one place a Bootstrap component shows through;
-// flatten it so it reads as part of the band.
+// flatten it so it reads as part of the white bar.
 .stl-lang .btn {
-  height: 100%;
   border: 0;
-  border-radius: 0;
   background-color: transparent;
-  color: rgba(255, 255, 255, 0.92);
+  color: $stl-blue;
   font-weight: 600;
 
   &:hover,
   &:focus,
   &:active {
-    background-color: rgba(255, 255, 255, 0.12);
-    color: white;
+    background-color: rgba($stl-blue, 0.08);
+    color: $stl-blue-dark;
   }
 }
 </style>

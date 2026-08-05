@@ -1,7 +1,7 @@
 <template>
   <div class="stl-home">
     <!-- Hero band, echoing the portal's dark blue hero -->
-    <section v-if="section !== 'facets'" class="stl-hero">
+    <section v-if="section !== 'tags'" class="stl-hero">
       <div class="stl-hero-inner">
         <h1>
           {{ heroTitle }}
@@ -18,7 +18,7 @@
     </section>
 
     <!-- Quick Stats -->
-    <section v-if="section !== 'hero' && stats.length > 0" class="stl-home-section stl-stats">
+    <section v-if="section !== 'tags' && stats.length > 0" class="stl-home-section stl-stats">
       <h2>Quick Stats</h2>
       <div class="stl-stat-grid">
         <div v-for="stat in stats" :key="stat.label" class="stl-stat-card">
@@ -29,7 +29,7 @@
     </section>
 
     <!-- Data by Department -->
-    <section v-if="section !== 'hero' && departments.length > 0" class="stl-home-section stl-departments">
+    <section v-if="section !== 'tags' && departments.length > 0" class="stl-home-section stl-departments">
       <h2>Data by Department</h2>
       <div class="stl-tag-cloud">
         <button
@@ -44,7 +44,7 @@
     </section>
 
     <!-- Data by Tag -->
-    <section v-if="section !== 'hero' && tags.length > 0" class="stl-home-section stl-tags">
+    <section v-if="section !== 'top' && tags.length > 0" class="stl-home-section stl-tags">
       <h2>Data by Tag</h2>
       <div class="stl-tag-cloud">
         <button
@@ -74,10 +74,11 @@ export default defineComponent({
     Description: defineAsyncComponent(() => import('./Description.vue'))
   },
   props: {
-    // The home view leads with the browse grid, which Catalog.vue renders
-    // between two StlHome instances: 'hero' renders the hero band above the
-    // grid, 'facets' the stats/department/tag sections below it. Unset
-    // renders everything (kept for a standalone use).
+    // Catalog.vue renders the browse grid between two StlHome instances:
+    // 'top' is the hero, Quick Stats and the department chips, all above the
+    // grid; 'tags' is the tag cloud below it — a long list that reads better
+    // as a footer than as something to scroll past. Unset renders everything
+    // (kept for a standalone use).
     section: {
       type: String,
       default: null

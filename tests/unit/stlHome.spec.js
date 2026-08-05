@@ -406,21 +406,32 @@ describe('stlHome', () => {
 
   describe('topicIconForId', () => {
     // The restructured catalog's topic sub-catalog ids ARE the portal topic
-    // slugs; each maps straight to its glyph.
+    // slugs; each gets the city's own glyph for that topic, lifted from the
+    // icon font on stlouis-mo.gov. Markers are the start of each outline.
     it.each([
-      ['urban-development-and-planning', 'M1 6v16'],                  // map
-      ['government', 'M5 13a7 7'],                                    // dome
-      ['housing', 'M3 9l9-7'],                                        // house
-      ['business-and-industry', 'rect x="2" y="7"'],                  // briefcase
-      ['transportation-infrastructure-and-utilities', 'M4 22L10 2'],  // road
-      ['law-safety-and-justice', 'M12 22s8-4'],                       // shield
-      ['environment', 'M11 20A7 7'],                                  // leaf
-      ['leisure-and-culture', 'M12 2L6 10'],                          // tree
-      ['health', 'M12 8v8'],                                          // cross
-      ['community', 'circle cx="9" cy="7"'],                          // people
-      ['education-and-training', 'M22 9L12 4']                        // grad cap
+      ['urban-development-and-planning', 'M2100 1151l-200 222'],   // skyline
+      ['government', 'M1400 2301h-200v-200q138'],                  // city hall
+      ['housing', 'M1252 2338l348 -345'],                          // house
+      ['business-and-industry', 'M900 1201h-300v1000h300'],        // factory
+      ['transportation-infrastructure-and-utilities',
+        'M0 2401h900q83 0 150.5'],                                 // bus and truck
+      ['law-safety-and-justice', 'M1150 2501h100q21'],             // police
+      ['environment', 'M1200 2379q160 0 312.5'],                   // leaf in circle
+      ['leisure-and-culture', 'M500 2778q117 0 224'],              // runner
+      ['health', 'M350 2301h1700q104'],                            // first aid
+      ['community', 'M900 2301h600q83'],                           // people
+      ['education-and-training', 'M2531 1494l-1281 -566']          // grad cap
     ])('maps the topic slug "%s"', (id, marker) => {
       expect(topicIconForId(id)).toContain(marker);
+    });
+
+    // These are solid outlines, not the stroked shapes custom.scss draws, so
+    // each has to carry its own fill/stroke and its own fit transform.
+    it('renders the city glyphs filled and fitted', () => {
+      const svg = topicIconForId('housing');
+      expect(svg).toContain('fill="currentColor"');
+      expect(svg).toContain('stroke="none"');
+      expect(svg).toMatch(/transform="translate\([-\d. ]+\) scale\([-\d. ]+\)"/);
     });
 
     it('falls back to pattern-matching the title for unknown ids', () => {
