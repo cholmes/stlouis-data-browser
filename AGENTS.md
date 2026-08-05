@@ -1,73 +1,106 @@
-<!-- ops-sync:begin — synced from portolan-sdi/portolan-ops. Edit there, not here. -->
-# Portolan Agent Norms
+# St. Louis Data Browser — Agent Notes
 
-These rules apply to AI agents working in any portolan-sdi repo. Every downstream repo carries this text verbatim as a synced block at the top of its own `AGENTS.md`. Repo-specific instructions live below the block and override the canonical rules in that repo only.
+A St. Louis-branded fork of [portolan-browser](https://github.com/portolan-sdi/portolan-browser),
+which is itself a fork of [STAC Browser](https://github.com/radiantearth/stac-browser). It serves
+one catalog: the St. Louis open-data mirror at
+`data.source.coop/tge-labs/st-louis-open-data-mirror`, built with
+[portolan-catalog-stlouis](https://github.com/cholmes/portolan-catalog-stlouis).
 
-Claude Code does not read `AGENTS.md`. Each repo carries a one-line `CLAUDE.md` that imports it instead. Put repo-specific instructions in `AGENTS.md`, never in `CLAUDE.md`, which the sync overwrites.
+This repo is personal, not part of the Portolan org. The portolan-ops norms — the PR body contract,
+VOICE.md, the issue templates — do not apply here. What follows does.
 
-## Ground Rules
+## Where the Customization Lives
 
-The [portolan-spec](https://github.com/portolan-sdi/portolan-spec) repo is ground truth for the Portolan standard. The CLI, validator, registry, and every other tool implement the spec. They are downstream of it. Never describe the CLI as the source of truth. Propose spec changes in portolan-spec.
+Everything that makes this a St. Louis browser rather than a generic one sits in seven places.
+Change these; leave the rest of the tree matching upstream so `git pull upstream main` stays cheap.
 
-Before documenting any command, flag, or API, verify it exists in the shipped tool. A fabricated example persists beyond the session that wrote it.
+| File | Owns |
+| --- | --- |
+| `config.js` | Catalog URL, title, locales, footer links |
+| `basemaps.config.js` | The three basemaps and `MAP_CONSTRAINTS` (bounds, zoom limits, home view) |
+| `src/components/StlHeader.vue` | The white wordmark bar, the blue action band, the MENU button |
+| `src/theme/variables.scss` | The palette and fonts, as Sass variables |
+| `src/theme/custom.scss` | Component-level styling, referencing those variables |
+| `index.html` | Favicon, font link, meta tags |
+| `.github/workflows/deploy.yml` | The GitHub Pages build (`SB_pathPrefix`, hash routing) |
 
-Every repo uses Apache-2.0 except portolan-browser and portolan-nl-demo, which are ISC forks. See [norms/repos.md](https://github.com/portolan-sdi/portolan-ops/blob/main/norms/repos.md) for the record. Never introduce code under another license without a human decision recorded there.
+Brand values have exactly one home: the `$stl-*` variables in `variables.scss`. Do not paste hex
+literals into components.
 
-Never bypass pre-commit hooks or CI gates. Green means green.
+Small supporting edits ride along with those files: `src/StacBrowser.vue` mounts `StlHeader` in
+place of upstream's `.site` row (and carries the footer disclaimer), and
+`src/components/maps/MapMixin.js` spreads `MAP_CONSTRAINTS` into the MapLibre constructor.
 
-Write commits in conventional form. Squash-merge makes the pull request title become the commit message.
+## Brand Facts
 
-## Pull Requests and Issues
+The palette is stlouis-mo.gov's, fetched from the city's own pages rather than guessed:
 
-A reviewer should finish a pull request body in under a minute. They should know what changed, why, and that it works. CI lints every body on each push and edit. The contract requires:
+- Dark blue `#1E526B` — headings, links, the header's accent band; hover darkens to `#174054`
+- Brick red `#C03221` — the fleur-de-lis and the MENU button
+- Green `#538400`, light blue `#A8D4E8`, orange `#E89D07` — supporting accents
+- Page background `#EFEFEF`, with white content cards under a
+  `0 1px 3px rgba(0,0,0,.2)` shadow and 3px radius — the city site's card treatment
+- Body: `"Open Sans", verdana, sans-serif`. Headings h1–h3: `"Merriweather", georgia, serif`
+  (h4–h6 go back to Open Sans in `custom.scss`). Both load from Google Fonts in `index.html`.
 
-- The sections `## What this changes`, `## Why`, and `## Verification` exist and are not empty.
-- 200 words outside code blocks. No section longer than six lines. Fenced blocks are unlimited, so evidence never competes with the budget.
-- The prose references the issue the change resolves, as `#N` or its URL.
-- Verification pastes the command you ran and its output in a fenced block under `## Verification`. It names the data it read, as a URL or catalog path.
-- A change that alters no behavior ticks the waiver checkbox instead. Keep its wording intact because the check matches the phrase "does not alter behavior".
+The wordmark is rebuilt in markup — bold `STLOUIS`, regular `-MO`, the fleur-de-lis, `GOV` — the
+way stlouis-mo.gov's own `.logo` markup does it. `public/fleur-de-lis.svg` is the city's actual
+mark: it ships base64-embedded in every stlouis-mo.gov page (fill `#C03221`, title "Fleur De Lis"),
+decoded from there, and doubles as the favicon.
 
-Good evidence shows the fix works against real data. Just proving a command exits zero is not enough. Take the failing command from the issue, run it against the same catalog, and show it now succeeds. A wall of pytest output does not count.
+The supporting neutrals (`$stl-ink` body text, `$stl-slate` secondary text) are *not* sampled —
+they are neutral choices made to sit with the blues. Everything else was fetched. If you need a new
+brand value, go get it from stlouis-mo.gov; never eyeball one.
 
-Issues follow the same rules. A bug report must include the exact reproduction steps. A feature request must show where the current tool falls short. A task must include the command that proves it is done.
+## Local Development
 
-Every repo uses the org issue template. The CI check rejects blank issues. On pull requests, it fails the check. On issues, it adds the `needs-rewrite` label and leaves a comment once. Dependabot is exempt.
+The catalog lives at `https://data.source.coop/tge-labs/st-louis-open-data-mirror/catalog.json`.
+To work against a local copy instead:
 
-## Documentation
+```sh
+npx serve ~/repos/portolan-catalog-stlouis/catalog --cors -l 8081
+SB_catalogUrl=http://localhost:8081/catalog.json pnpm start
+```
 
-Agents writing or restructuring documentation follow two exemplars named in [norms/docs.md](https://github.com/portolan-sdi/portolan-ops/blob/main/norms/docs.md). [obstore](https://github.com/developmentseed/obstore) demonstrates a concise, human-readable README that delegates to good docs elsewhere. [scaffold-docs-skill](https://github.com/dbreunig/scaffold-docs-skill) shows how to build docs that have a clear human-facing surface, maintain examples via tests so they never drift, and auto-generate API docs instead of duplicating them. Both keep documentation maintainable and robust. Draft top-down with human review between layers. Do not draft a README from a generic template or from memory.
+Any `SB_*` environment variable overrides the matching key in `config.js`.
 
-Three rules apply to every docs change. Use title-case headings without emoji. Use absolute dates like "in July 2026", never "recently". Command examples must have been actually run against the shipped tool.
+## Verification
 
-## Voice and Messaging
+`verify-stlouis.mjs` is this fork's real test. It drives a browser against the running site and
+asserts the things this fork actually promises: the exact brand colours, the wordmark, the fonts,
+the footer provenance, and — once the catalog is live — the three basemaps, the city bounds
+clamping pan and zoom, and that collections render. Catalog-dependent checks are skipped, not
+failed, while the catalog is not yet published.
 
-Every written artifact follows [VOICE.md](https://github.com/portolan-sdi/portolan-ops/blob/main/VOICE.md). This includes READMEs, PR and issue bodies, commit message bodies, docs, and lasting code comments. Apply it while drafting, not as cleanup.
+```sh
+node_modules/.bin/vite --port 8080 --strictPort &
+node verify-stlouis.mjs         # screenshots in ./verify-out
+```
 
-Before drafting substantial public copy like a README, a docs page, or an announcement, fetch and read [VOICE.md](https://github.com/portolan-sdi/portolan-ops/blob/main/VOICE.md) and [copy/messaging.md](https://github.com/portolan-sdi/portolan-ops/blob/main/copy/messaging.md) in full. If you cannot fetch them, say so and stop. Write from the actual files, not from memory.
+`tests/unit` still applies and runs in CI.
 
-How Portolan is described comes from [copy/messaging.md](https://github.com/portolan-sdi/portolan-ops/blob/main/copy/messaging.md) alone.
+`tests/e2e` does not. That suite is inherited and asserts the upstream product — a data-source
+picker at `/`, `/external/` routing, an API-backed search page — none of which this fork has. Its
+workflow is manual-only for that reason. The files are left untouched so merges from upstream stay
+clean; do not "fix" them to pass against this configuration.
 
-## Org-Wide Facts
+Note that MapLibre only renders when the page is actually visible. Automation that drives a
+backgrounded tab will show an inert map with no style loaded and no tile requests, which looks
+exactly like a broken basemap. Verify maps through this script, not a hidden tab.
 
-The canonical homepage is https://www.portolan-sdi.org/. Canonical URLs live in [copy/urls.md](https://github.com/portolan-sdi/portolan-ops/blob/main/copy/urls.md). Do not hardcode variants.
+## Upstream
 
-Community discussion happens in the [Portolan Google Group](https://groups.google.com/g/portolan) and the [Portolan channel](https://cloudnativegeo.slack.com/archives/C0A1JBH9529) in Cloud-Native Geo Slack. Planning lives in [org-level GitHub projects](https://github.com/orgs/portolan-sdi/projects/1).
+`upstream` points at portolan-sdi/portolan-browser. Pull improvements with `git pull upstream main`.
+Conflicts will concentrate in the seven files above, which is why they are kept small and separate.
 
-## Contribution Rules
+`gh` commands default to `origin` (this repo). That is deliberate — do not add a fork relationship.
 
-The [AI policy](https://github.com/portolan-sdi/portolan-ops/blob/main/policies/AI_POLICY.md) applies to every contribution. An agent may draft the diff and the pull request body. A human must read, understand, and approve both before review is requested. Agents never open PRs, post comments, or take action in shared spaces without human approval.
+## Working Rules
 
-Follow the [contributing guide](https://github.com/portolan-sdi/portolan-ops/blob/main/policies/CONTRIBUTING.md) and the [code of conduct](https://github.com/portolan-sdi/portolan-ops/blob/main/policies/CODE_OF_CONDUCT.md).
+Verify before claiming. This is a visual project: a change to the header or a basemap is not done
+until it has been loaded in a browser and looked at. Screenshots beat assertions.
 
-## Sync Discipline
+Never fabricate a tile URL, a style name, or a hex value. Every one in this repo was fetched or
+sampled. If you need a new one, go get it.
 
-Files between `ops-sync` markers are synced from [portolan-ops](https://github.com/portolan-sdi/portolan-ops). They are overwritten on every sync run. To change one, edit it in portolan-ops, never in place.
-
-One canonical home per fact. If a value like a color, URL, or policy line exists in portolan-ops, link to it rather than copying it.
-<!-- ops-sync:end -->
-
-# Repo-specific instructions
-
-<!-- Add instructions for this repo below. The block above is overwritten by
-     sync. This file is the only home for repo-specific agent rules: CLAUDE.md
-     carries the import and nothing else. -->
+The catalog is the source of truth for what data exists. Read it; do not infer collection names.
