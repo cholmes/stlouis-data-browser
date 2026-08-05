@@ -91,7 +91,12 @@
     font-weight: 600;
 
     // Readable on the grey page: outline buttons sit on white, not on $stl-bg.
-    background-color: white;
+    // Set the Bootstrap variable, not the property — this #stac-browser scope
+    // carries an ID, so the property would out-specify Bootstrap's own
+    // .active/:hover rules and turn a pressed toggle (view mode, sort
+    // direction) white-on-white. The variable only feeds the default state;
+    // hover and active keep their primary fill.
+    --bs-btn-bg: white;
   }
 
   > footer {
