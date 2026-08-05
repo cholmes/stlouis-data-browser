@@ -121,6 +121,44 @@ export function hasTopic(stac, topic) {
 }
 
 /**
+ * Aggregates the quick-stat totals across loaded collections: features from
+ * `table:row_count`, style count from style-role assets, and the data size
+ * from data/visual asset `file:size`. Both the home view and the department
+ * catalog pages read their stat rows from this.
+ *
+ * Defensive: entries without the fields simply contribute nothing, so the
+ * totals build up as collections load.
+ *
+ * @param {Array} children Loaded STAC collections (or any objects).
+ * @returns {{features: number, styles: number, bytes: number}}
+ */
+export function quickStats(children) {
+  const totals = { features: 0, styles: 0, bytes: 0 };
+  if (!Array.isArray(children)) {
+    return totals;
+  }
+  for (const child of children) {
+    const rows = child?.['table:row_count'];
+    if (Number.isFinite(rows)) {
+      totals.features += rows;
+    }
+    const assets = child?.assets;
+    if (assets && typeof assets === 'object') {
+      for (const asset of Object.values(assets)) {
+        const roles = Array.isArray(asset?.roles) ? asset.roles : [];
+        if (roles.includes('style')) {
+          totals.styles++;
+        }
+        if ((roles.includes('data') || roles.includes('visual')) && Number.isFinite(asset?.['file:size'])) {
+          totals.bytes += asset['file:size'];
+        }
+      }
+    }
+  }
+  return totals;
+}
+
+/**
  * A byte count as a short human-readable string, e.g. "270.1 MB".
  */
 export function humanFileSize(bytes) {

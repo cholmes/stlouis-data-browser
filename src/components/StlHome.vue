@@ -69,9 +69,8 @@
 import { defineComponent, defineAsyncComponent } from 'vue';
 import { mapGetters, mapState } from 'vuex';
 import { STAC } from 'stac-js';
-import { isObject } from 'stac-js/src/utils.js';
 import BIconDatabase from '~icons/bi/database';
-import { collectionTopics, expandChildren, humanFileSize, topicIcon } from '../utils/stlHome';
+import { collectionTopics, expandChildren, humanFileSize, quickStats, topicIcon } from '../utils/stlHome';
 
 export default defineComponent({
   name: 'StlHome',
@@ -152,26 +151,7 @@ export default defineComponent({
       if (this.children.length === 0) {
         return [];
       }
-      let features = 0;
-      let styles = 0;
-      let bytes = 0;
-      for (const child of this.children) {
-        const rows = child['table:row_count'];
-        if (Number.isFinite(rows)) {
-          features += rows;
-        }
-        if (isObject(child.assets)) {
-          for (const asset of Object.values(child.assets)) {
-            const roles = Array.isArray(asset?.roles) ? asset.roles : [];
-            if (roles.includes('style')) {
-              styles++;
-            }
-            if ((roles.includes('data') || roles.includes('visual')) && Number.isFinite(asset['file:size'])) {
-              bytes += asset['file:size'];
-            }
-          }
-        }
-      }
+      const { features, styles, bytes } = quickStats(this.children);
       // Leaves count as collections once known to be one: either loaded as a
       // collection, or linked from a department sub-catalog (whose children
       // are its collections). Unloaded top-level children stay uncounted so

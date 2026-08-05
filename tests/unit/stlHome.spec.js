@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Catalog, Collection } from 'stac-js';
-import { collectionTopics, expandChildren, hasTopic, humanFileSize, topicIcon, TOPIC_SCHEME } from '../../src/utils/stlHome.js';
+import { collectionTopics, expandChildren, hasTopic, humanFileSize, quickStats, topicIcon, TOPIC_SCHEME } from '../../src/utils/stlHome.js';
 
 // The shape the St. Louis catalog publishes (STAC Themes extension).
 const themed = (concepts, scheme = TOPIC_SCHEME) => ({ themes: [{ scheme, concepts }] });
@@ -184,6 +184,65 @@ describe('stlHome', () => {
     it('rejects other topics and empty objects', () => {
       expect(hasTopic(stac, 'government')).toBe(false);
       expect(hasTopic({}, 'government')).toBe(false);
+    });
+  });
+
+  describe('quickStats', () => {
+    // The shape the St. Louis collections publish: table:row_count on the
+    // collection, file:size and roles on the assets.
+    const parcels = {
+      'table:row_count': 134362,
+      assets: {
+        parcels: { roles: ['data'], 'file:size': 31354481 },
+        'parcels-tiles': { roles: ['visual'], 'file:size': 36066850 },
+        'styles/default': { roles: ['default', 'style'], 'file:size': 797 },
+        'styles/year-built': { roles: ['style'], 'file:size': 1362 },
+        thumbnail: { roles: ['thumbnail'], 'file:size': 387596 }
+      }
+    };
+    const sales = {
+      'table:row_count': 250000,
+      assets: {
+        sales: { roles: ['data'], 'file:size': 5000000 }
+      }
+    };
+
+    it('sums rows, styles and data/visual asset sizes across collections', () => {
+      expect(quickStats([parcels, sales])).toEqual({
+        features: 384362,
+        styles: 2,
+        bytes: 72421331
+      });
+    });
+
+    it('ignores thumbnail and style asset sizes', () => {
+      const { bytes } = quickStats([parcels]);
+      expect(bytes).toBe(31354481 + 36066850);
+    });
+
+    it('builds up as collections load: partial input still counts', () => {
+      expect(quickStats([sales])).toEqual({ features: 250000, styles: 0, bytes: 5000000 });
+    });
+
+    it('contributes nothing for collections without the fields', () => {
+      const bare = [{}, { assets: {} }, { 'table:row_count': 'many' }, null];
+      expect(quickStats(bare)).toEqual({ features: 0, styles: 0, bytes: 0 });
+    });
+
+    it('ignores assets without numeric sizes or roles', () => {
+      const odd = {
+        assets: {
+          a: { roles: ['data'] },                       // no size
+          b: { roles: ['data'], 'file:size': '9000' },  // size not a number
+          c: { 'file:size': 9000 }                      // no roles
+        }
+      };
+      expect(quickStats([odd])).toEqual({ features: 0, styles: 0, bytes: 0 });
+    });
+
+    it('returns zeros for malformed input', () => {
+      expect(quickStats(null)).toEqual({ features: 0, styles: 0, bytes: 0 });
+      expect(quickStats('nope')).toEqual({ features: 0, styles: 0, bytes: 0 });
     });
   });
 

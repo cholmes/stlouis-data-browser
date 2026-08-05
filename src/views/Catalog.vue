@@ -3,6 +3,9 @@
     <!-- The root catalog gets the portal-style home: hero, topics, stats,
          tags. The generic meta column below is hidden in its favour. -->
     <StlHome v-if="isRoot" />
+    <!-- Department sub-catalogs get the home view's Quick Stats treatment,
+         scaled down and computed from their child collections. -->
+    <StlCatalogStats v-if="!isRoot && !isCollection && catalogs.length > 0" />
     <section v-if="isCollection" class="hero-map">
       <MapView
         ref="mapView" :stac="data" v-bind="mapData" @changed="dataChanged"
@@ -119,6 +122,7 @@ export default defineComponent({
     MetadataGroups: defineAsyncComponent(() => import('../components/MetadataGroups.vue')),
     Providers: defineAsyncComponent(() => import('../components/Providers.vue')),
     ReadMore,
+    StlCatalogStats: defineAsyncComponent(() => import('../components/StlCatalogStats.vue')),
     StlHome: defineAsyncComponent(() => import('../components/StlHome.vue')),
     Thumbnails: defineAsyncComponent(() => import('../components/Thumbnails.vue')),
     ParquetViewer: defineAsyncComponent(() => import('../components/ParquetViewer.vue'))
