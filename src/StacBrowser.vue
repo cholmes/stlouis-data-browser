@@ -7,54 +7,29 @@
     <Sidebar v-if="sidebar !== null" v-model="sidebar" />
     <!-- Header -->
     <header ref="header" :class="{ scrolled, 'hide-site-header': hideSite }">
-      <b-row class="site">
-        <b-col md="12">
-          <nav class="actions navigation">
-            <b-button-group v-if="canSearch || !isServerSelector">
-              <b-button v-if="!isServerSelector" variant="header" :title="$t('browse')" @click="sidebar = !sidebar">
-                <b-icon-list /><span class="button-label">{{ $t('browse') }}</span>
-              </b-button>
-              <b-button v-if="canSearch" variant="header" :to="searchBrowserLink" :title="$t('search.title')" :pressed="isSearchPage">
-                <b-icon-search /><span class="button-label">{{ $t('search.title') }}</span>
-              </b-button>
-              <b-button v-if="root" variant="header" id="popover-root-btn" tabindex="0">
-                <b-icon-database /><span class="button-label">{{ serviceType }}</span>
-              </b-button>
-            </b-button-group>
-          </nav>
-          <div class="title">
-            <StacLink v-if="root" :data="root">
-              <HeaderTitle ref="headerTitle" />
-            </StacLink>
-            <HeaderTitle v-else ref="headerTitle" />
-          </div>
-          <nav class="actions user">
-            <b-button-group>
-              <b-button v-if="canAuthenticate" variant="header" @click="logInOut" :title="authTitle">
-                <component :is="authIcon" /><span class="button-label">{{ authLabel }}</span>
-              </b-button>
-              <LanguageChooser
-                v-if="supportedLocalesFromVueX.length > 1"
-                :data="data" :currentLocale="localeFromVueX" :locales="supportedLocalesFromVueX"
-                @set-locale="locale => switchLocale({locale, userSelected: true})"
-              />
-              <b-button
-                v-if="!enforcedColorModeFromVueX || enforcedColorModeFromVueX === 'auto'"
-                variant="header"
-                @click="toggleColorMode"
-              >
-                <b-icon-sun v-if="colorMode === 'light'" :title="$t('switchToDarkMode')" />
-                <b-icon-moon-stars v-else :title="$t('switchToLightMode')" />
-              </b-button>
-            </b-button-group>
-          </nav>
-        </b-col>
-      </b-row>
+      <StlHeader
+        :catalogTitle="catalogTitle"
+        :canSearch="canSearch" :isSearchPage="isSearchPage" :searchLink="searchBrowserLink"
+        :isServerSelector="isServerSelector" :menuOpen="!!sidebar"
+        :canAuthenticate="canAuthenticate" :authIcon="authIcon" :authLabel="authLabel" :authTitle="authTitle"
+        :data="data" :currentLocale="localeFromVueX" :locales="supportedLocalesFromVueX"
+        @toggle-sidebar="sidebar = !sidebar"
+        @log-in-out="logInOut"
+        @set-locale="locale => switchLocale({locale, userSelected: true})"
+      />
       <b-row class="page" v-if="!loading">
         <b-col md="12">
           <div class="title">
             <img v-if="icon && !isRoot" :src="icon.getAbsoluteUrl()" :alt="icon.title" :title="icon.title" class="icon">
             <h1 :title="title">{{ title }}</h1>
+            <!-- The catalog-stats popover used to hang off the site title. That
+                 title now lives in the StlHeader bar, so the trigger moves here. -->
+            <b-button
+              v-if="root && isRoot" size="sm" variant="outline-primary" id="popover-root-btn"
+              :title="serviceType" tabindex="0"
+            >
+              <b-icon-database /><span class="button-label">{{ serviceType }}</span>
+            </b-button>
           </div>
           <nav class="actions navigation">
             <b-button-group>
@@ -84,6 +59,9 @@
           <a :href="link.url" target="_blank" rel="noopener noreferrer">{{ $te(`footerLinks.${link.label}`) ? $t(`footerLinks.${link.label}`) : link.label }}</a>
         </li>
       </ul>
+      <small class="stl-disclaimer text-body-secondary">
+        An unofficial browser for the City of St. Louis's published open data. Not affiliated with the City of St. Louis.
+      </small>
       <i18n-t tag="small" keypath="poweredBy" class="poweredby text-body-secondary" scope="global">
         <template #link>
           <a href="https://github.com/radiantearth/stac-browser" target="_blank" rel="noopener noreferrer">STAC Browser</a> {{ browserVersion }}
@@ -91,7 +69,7 @@
       </i18n-t>
     </footer>
     <b-popover
-      v-if="root" id="popover-root" class="popover-large" target="popover-root-btn"
+      v-if="root && isRoot && !loading" id="popover-root" class="popover-large" target="popover-root-btn"
       placement="bottom" :title="serviceType" teleport-to="#stac-browser"
       click focus :boundary-padding="10" strategy="fixed"
     >
@@ -113,9 +91,8 @@ import BIconLock from '~icons/bi/lock';
 import BIconUnlock from '~icons/bi/unlock';
 
 import ErrorAlert from './components/ErrorAlert.vue';
-import HeaderTitle from './components/HeaderTitle.vue';
 import Loading from './components/Loading.vue';
-import StacLink from './components/StacLink.vue';
+import StlHeader from './components/StlHeader.vue';
 
 import { STAC } from 'stac-js';
 import { hasText, isObject, size, URI } from 'stac-js/src/utils.js';
@@ -149,17 +126,15 @@ export default defineComponent({
   name: 'StacBrowser',
   components: {
     Authentication,
-    BIconLock,
-    BIconUnlock,
+    // BIconLock/BIconUnlock are not registered: authIcon() returns the imported
+    // component object itself, which <component :is> renders without a lookup.
     BPopover: defineAsyncComponent(() => import('bootstrap-vue-next').then(m => m.BPopover)),
     ErrorAlert,
-    HeaderTitle,
-    LanguageChooser: defineAsyncComponent(() => import('./components/LanguageChooser.vue')),
     Loading,
     RootStats: defineAsyncComponent(() => import('./components/RootStats.vue')),
     Sidebar: defineAsyncComponent(() => import('./components/Sidebar.vue')),
-    StacLink,
-    StacSource: defineAsyncComponent(() => import('./components/StacSource.vue'))
+    StacSource: defineAsyncComponent(() => import('./components/StacSource.vue')),
+    StlHeader
   },
   props: {
     ...Props

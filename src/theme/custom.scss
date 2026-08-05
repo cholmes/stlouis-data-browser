@@ -1,71 +1,117 @@
 @import "variables";
 
+// Component-level styling for the St. Louis Data Browser. Every colour here
+// comes from a variable in variables.scss — no hex literals, so the palette
+// has one home.
+
 #stac-browser {
-  // The bar's colour comes from $header / $header-background in variables.scss.
-  // Only the accent rule under it lives here.
-  > header .site {
-    border-bottom: 2px solid $primary;
+  // Body links are the city's dark blue, darkening on hover with an underline.
+  //
+  // Scoped away from anything that is a link only structurally: buttons, cards,
+  // tabs and the header nav would all sprout stray underlines otherwise.
+  // :where() keeps the exclusion list at zero specificity, so later resets can
+  // still win with a single class instead of needing to out-specify a long
+  // :not() chain.
+  a:not(:where(.btn, .nav-link, .dropdown-item, .stl-link, .stl-brand, .card-link)) {
+    color: $stl-blue;
+
+    &:hover,
+    &:focus {
+      color: $stl-blue-dark;
+      text-decoration: underline;
+    }
+
+    // Links wrapping an image, icon or badge should not pick up an underline.
+    &:has(> img),
+    &:has(> svg),
+    &:has(> .badge) {
+      text-decoration: none;
+    }
   }
 
+  // The map is not part of the document's prose. Its attribution and controls
+  // come with MapLibre's own styling and should keep it.
+  .maplibregl-map a,
+  .maplibregl-ctrl a {
+    color: inherit;
+  }
+
+  // The StlHeader strips supply the header's own colour and spacing; this row
+  // is the page title strip beneath them.
   > header .page {
     padding-top: 0.75rem;
     padding-bottom: 0.5rem;
 
     h1 {
-      color: #202a4f;
+      color: $stl-blue;
     }
   }
 
-  h2 {
-    color: #202a4f;
-    font-weight: 700;
-    letter-spacing: -0.01em;
+  // Merriweather is for the big wayfinding heads (h1–h3), as on
+  // stlouis-mo.gov; smaller heads and card titles stay on Open Sans.
+  h4, h5, h6 {
+    font-family: $font-family-sans-serif;
   }
 
+  h2 {
+    color: $stl-blue;
+    font-weight: 700;
+  }
+
+  // White content cards on the grey page, with the city site's subtle shadow.
   .card {
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: 0.5rem;
-    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+    background-color: white;
+    border: 0;
+    border-radius: $border-radius;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    transition: box-shadow 0.15s ease;
 
     &:hover {
-      border-color: rgba(65, 99, 204, 0.3);
-      box-shadow: 0 2px 8px rgba(65, 99, 204, 0.1);
+      box-shadow: 0 2px 8px rgba($stl-blue, 0.25);
     }
   }
 
   .catalog-card .card-title {
-    font-family: "Archivo", sans-serif;
-    font-weight: 600;
+    font-family: $font-family-sans-serif;
+    font-weight: 700;
     font-size: 1.05rem;
   }
 
   .catalog-card .intro {
-    color: #343e63;
+    color: $stl-slate;
     font-size: 0.875rem;
-    line-height: 1.6;
+    line-height: 1.5;
   }
 
   .btn-primary {
-    font-weight: 500;
+    font-weight: 600;
   }
 
   .btn-outline-primary {
-    font-weight: 500;
+    font-weight: 600;
+
+    // Readable on the grey page: outline buttons sit on white, not on $stl-bg.
+    background-color: white;
   }
 
   > footer {
-    border-top: 1px solid #d4d8e8;
+    border-top: 1px solid rgba($stl-blue, 0.18);
     padding-top: 1rem;
     margin-top: 1rem;
   }
 
   .description {
-    color: #343e63;
-    line-height: 1.7;
+    color: $stl-ink;
+    line-height: 1.6;
   }
 
   .badge {
     font-weight: 500;
     letter-spacing: 0.02em;
+  }
+
+  .stl-disclaimer {
+    display: block;
+    margin-bottom: 0.25rem;
   }
 }

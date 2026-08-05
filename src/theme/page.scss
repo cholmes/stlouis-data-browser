@@ -41,6 +41,12 @@ svg {
   // min-height the container grows with its content and the header stays pinned.
   min-height: 100%;
   gap: var(--sb-block-gap);
+  // The StlHeader breaks out to the viewport edges with a 50vw calc. 50vw
+  // counts the scrollbar gutter, so without clipping the overflow it can add a
+  // horizontal scrollbar, which narrows the viewport, which resizes the header.
+  // Clipping breaks that loop. `clip` rather than `hidden` so it does not turn
+  // the container into a scroll port for sticky descendants.
+  overflow-x: clip;
 
   @include media-breakpoint-only(xxxl) {
     max-width: 75vw;
