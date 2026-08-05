@@ -35,11 +35,15 @@ title and the catalog-stats trigger there), and carries the footer disclaimer;
 selected topic/tag; `src/components/maps/MapMixin.js` spreads `MAP_CONSTRAINTS` into the MapLibre
 constructor.
 
-The home view reads the portal's own metadata off each child collection: topics from the STAC
+The home view reads the portal's own metadata off the leaf collections: topics from the STAC
 Themes extension (`themes[].concepts` under the scheme `https://www.stlouis-mo.gov/data/topics/`),
 tags from `keywords`, and the Quick Stats from `table:row_count` and asset `file:size`/roles. The
-topic/tag selection travels in the state query parameters (`#/?.topic=<slug>`, `#/?.tag=<tag>`), so
-filtered views are linkable. Sections whose data is absent simply do not render — the accessors in
+catalog nests one level — root → department sub-catalogs → collections — so `expandChildren` in
+`src/utils/stlHome.js` expands each loaded child catalog into its child collections (a child that
+is itself a collection is used directly, so a flat catalog keeps working). The topic/tag selection
+travels in the state query parameters (`#/?.topic=<slug>`, `#/?.tag=<tag>`), so filtered views are
+linkable; without a filter the root grid shows the department cards, with one active it switches
+to the matching leaf collections. Sections whose data is absent simply do not render — the accessors in
 `src/utils/stlHome.js` are defensive, and `tests/unit/stlHome.spec.js` pins that down.
 
 ## Brand Facts

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { collectionTopics, hasTopic, humanFileSize, topicIcon, TOPIC_SCHEME } from '../../src/utils/stlHome.js';
+import { Catalog, Collection } from 'stac-js';
+import { collectionTopics, expandChildren, hasTopic, humanFileSize, topicIcon, TOPIC_SCHEME } from '../../src/utils/stlHome.js';
 
 // The shape the St. Louis catalog publishes (STAC Themes extension).
 const themed = (concepts, scheme = TOPIC_SCHEME) => ({ themes: [{ scheme, concepts }] });
@@ -63,6 +64,109 @@ describe('stlHome', () => {
       ['concept without id and title', { themes: [{ scheme: TOPIC_SCHEME, concepts: [{}] }] }]
     ])('returns [] for malformed input: %s', (_, stac) => {
       expect(collectionTopics(stac)).toEqual([]);
+    });
+  });
+
+  describe('expandChildren', () => {
+    // A miniature of the live catalog: root → department sub-catalogs →
+    // collections, with ids that are POSIX paths like "assessor/parcels".
+    const BASE = 'https://example.com/data/';
+    const collectionJson = (id) => ({
+      type: 'Collection', id, stac_version: '1.1.0', description: id,
+      license: 'other', extent: { spatial: { bbox: [[0, 0, 1, 1]] }, temporal: { interval: [[null, null]] } },
+      links: []
+    });
+    const catalogJson = (id, childHrefs) => ({
+      type: 'Catalog', id, stac_version: '1.1.0', description: id,
+      links: childHrefs.map(href => ({ rel: 'child', href, type: 'application/json' }))
+    });
+
+    const root = new Catalog(
+      catalogJson('root', ['./assessor/catalog.json', './citywide/catalog.json', './flat/collection.json']),
+      `${BASE}catalog.json`
+    );
+    const assessor = new Catalog(
+      catalogJson('assessor', ['./parcels/collection.json', './city-blocks/collection.json']),
+      `${BASE}assessor/catalog.json`
+    );
+    const parcels = new Collection(collectionJson('assessor/parcels'), `${BASE}assessor/parcels/collection.json`);
+    const flat = new Collection(collectionJson('flat'), `${BASE}flat/collection.json`);
+
+    const database = {
+      [`${BASE}assessor/catalog.json`]: assessor,
+      [`${BASE}assessor/parcels/collection.json`]: parcels,
+      [`${BASE}flat/collection.json`]: flat
+    };
+    const getStac = source => (typeof source === 'string' ? database[source] : null) ?? null;
+    const children = root.getStacLinksWithRel('child');
+
+    it('replaces a loaded child catalog with its child collections', () => {
+      const leaves = expandChildren(children, getStac);
+      expect(leaves.map(leaf => leaf.url)).toEqual([
+        `${BASE}assessor/parcels/collection.json`,
+        `${BASE}assessor/city-blocks/collection.json`,
+        `${BASE}citywide/catalog.json`,
+        `${BASE}flat/collection.json`
+      ]);
+    });
+
+    it('attaches the loaded STAC objects to their leaves', () => {
+      const leaves = expandChildren(children, getStac);
+      expect(leaves[0].stac).toBe(parcels);
+      expect(leaves[1].stac).toBeNull(); // grandchild not loaded yet
+      expect(leaves[3].stac).toBe(flat);
+    });
+
+    it('keeps a child that is itself a collection as a direct leaf', () => {
+      const leaves = expandChildren(children, getStac);
+      const leaf = leaves.find(l => l.url === `${BASE}flat/collection.json`);
+      expect(leaf.expanded).toBe(false);
+      expect(leaf.link).toBe(children[2]);
+    });
+
+    it('keeps an unloaded child as a leaf so it can be queued', () => {
+      const leaves = expandChildren(children, getStac);
+      const leaf = leaves.find(l => l.url === `${BASE}citywide/catalog.json`);
+      expect(leaf.stac).toBeNull();
+      expect(leaf.expanded).toBe(false);
+    });
+
+    it('gives expanded leaves grid-renderable links with absolute hrefs', () => {
+      const leaf = expandChildren(children, getStac)[0];
+      expect(leaf.expanded).toBe(true);
+      expect(leaf.link.href).toBe(`${BASE}assessor/parcels/collection.json`);
+      expect(leaf.link.getAbsoluteUrl()).toBe(`${BASE}assessor/parcels/collection.json`);
+      expect(leaf.link.rel).toBe('child');
+    });
+
+    it('drops a loaded child catalog that has no children', () => {
+      const emptyRoot = new Catalog(catalogJson('root', ['./empty/catalog.json']), `${BASE}catalog.json`);
+      const empty = new Catalog(catalogJson('empty', []), `${BASE}empty/catalog.json`);
+      const leaves = expandChildren(
+        emptyRoot.getStacLinksWithRel('child'),
+        source => (source === `${BASE}empty/catalog.json` ? empty : null)
+      );
+      expect(leaves).toEqual([]);
+    });
+
+    it('expands one level only: a loaded grandchild catalog stays a leaf', () => {
+      const deep = new Catalog(catalogJson('assessor/parcels', ['./deeper/collection.json']), `${BASE}assessor/parcels/collection.json`);
+      const leaves = expandChildren(children, source => {
+        if (source === `${BASE}assessor/parcels/collection.json`) {
+          return deep;
+        }
+        return getStac(source);
+      });
+      expect(leaves.find(l => l.stac === deep)).toBeTruthy();
+      expect(leaves.some(l => l.url?.endsWith('deeper/collection.json'))).toBe(false);
+    });
+
+    it.each([
+      ['children not an array', 'nope', getStac],
+      ['children null', null, getStac],
+      ['getStac not a function', [], null]
+    ])('returns [] for malformed input: %s', (_, entries, resolver) => {
+      expect(expandChildren(entries, resolver)).toEqual([]);
     });
   });
 

@@ -71,7 +71,7 @@ import { mapGetters, mapState } from 'vuex';
 import { STAC } from 'stac-js';
 import { isObject } from 'stac-js/src/utils.js';
 import BIconDatabase from '~icons/bi/database';
-import { collectionTopics, humanFileSize, topicIcon } from '../utils/stlHome';
+import { collectionTopics, expandChildren, humanFileSize, topicIcon } from '../utils/stlHome';
 
 export default defineComponent({
   name: 'StlHome',
@@ -98,12 +98,18 @@ export default defineComponent({
       const isApi = Array.isArray(this.conformsTo) && this.conformsTo.length > 0;
       return isApi ? this.$t('index.api') : this.$t('index.catalog');
     },
-    // The children that have finished loading as full STAC collections. The
+    // The root's children expanded one level: department sub-catalogs are
+    // replaced by their child collections, while a child that is itself a
+    // collection stays a leaf (so a flat catalog keeps working).
+    leaves() {
+      return expandChildren(this.catalogs, this.getStac);
+    },
+    // The leaves that have finished loading as full STAC entities. The
     // sections below build up reactively while the background loader works
-    // through the queue (see created()).
+    // through the queue (see the `leaves` watcher).
     children() {
-      return this.catalogs
-        .map(child => this.getStac(child))
+      return this.leaves
+        .map(leaf => leaf.stac)
         .filter(stac => stac instanceof STAC);
     },
     selectedTopic() {
@@ -166,9 +172,17 @@ export default defineComponent({
           }
         }
       }
-      const stats = [
-        { label: 'Collections', value: this.catalogs.length.toLocaleString() }
-      ];
+      // Leaves count as collections once known to be one: either loaded as a
+      // collection, or linked from a department sub-catalog (whose children
+      // are its collections). Unloaded top-level children stay uncounted so
+      // department catalogs are never mistaken for collections.
+      const collections = this.leaves
+        .filter(leaf => leaf.stac?.isCollection || (leaf.expanded && !leaf.stac?.isCatalog))
+        .length;
+      const stats = [];
+      if (collections > 0) {
+        stats.push({ label: 'Collections', value: collections.toLocaleString() });
+      }
       if (features > 0) {
         stats.push({ label: 'Total features', value: features.toLocaleString() });
       }
@@ -183,25 +197,25 @@ export default defineComponent({
     }
   },
   watch: {
-    // Topics, tags and stats need every child's collection.json, but the
-    // background loader is normally fed by card visibility alone. Queue all
-    // children up front; the catalog is small (~20), so this settles fast.
-    catalogs: {
+    // Topics, tags and stats need every leaf's collection.json, but the
+    // background loader is normally fed by card visibility alone. Queue every
+    // unloaded leaf up front; while the department sub-catalogs are still
+    // loading they are leaves themselves, and once loaded they re-fire this
+    // watcher with their child collections. The catalog is small (~13
+    // departments, ~50 collections), so this settles fast.
+    leaves: {
       immediate: true,
-      handler(catalogs) {
-        if (!Array.isArray(catalogs)) {
+      handler(leaves) {
+        if (!Array.isArray(leaves)) {
           return;
         }
         // Lazily created: immediate watchers run before the created() hook.
         if (!this.queued) {
           this.queued = new Set();
         }
-        for (const child of catalogs) {
-          if (typeof child?.getAbsoluteUrl !== 'function') {
-            continue;
-          }
-          const url = child.getAbsoluteUrl();
-          if (url && !this.getStac(url) && !this.queued.has(url)) {
+        for (const leaf of leaves) {
+          const url = leaf?.url;
+          if (url && !leaf.stac && !this.queued.has(url)) {
             this.queued.add(url);
             this.$store.commit('queue', url);
           }

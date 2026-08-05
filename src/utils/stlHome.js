@@ -8,7 +8,60 @@
 // The catalog is generated, but every accessor here is defensive anyway —
 // collections without themes or keywords simply contribute nothing.
 
+import { Link } from 'stac-js';
+
 export const TOPIC_SCHEME = 'https://www.stlouis-mo.gov/data/topics/';
+
+/**
+ * Expands the root catalog's children one level into leaf entries.
+ *
+ * The catalog nests its collections one level deep — root → department
+ * sub-catalogs → collections — but a child that is itself a collection is
+ * kept as-is, so a flat catalog keeps working. A loaded child catalog is
+ * replaced by its child links; anything else (a collection, or a child that
+ * has not loaded yet) stays a leaf. Only one level is expanded.
+ *
+ * @param {Array} children The root's child links (or STAC objects).
+ * @param {function} getStac Resolves a link/URL/STAC to a loaded stac-js
+ *   object or null (the store's `getStac` getter).
+ * @returns {Array.<{link: Object, url: ?string, stac: ?Object, expanded: boolean}>}
+ *   Leaf entries: `link` is renderable in the collection grid (grandchild
+ *   links get an absolute href so they resolve outside their catalog's
+ *   context), `url` is the absolute URL (for queueing), `stac` the loaded
+ *   STAC object or null, `expanded` whether the leaf came out of a child
+ *   catalog.
+ */
+export function expandChildren(children, getStac) {
+  const leaves = [];
+  if (!Array.isArray(children) || typeof getStac !== 'function') {
+    return leaves;
+  }
+  for (const child of children) {
+    if (!child) {
+      continue;
+    }
+    const url = typeof child.getAbsoluteUrl === 'function' ? child.getAbsoluteUrl() : null;
+    const stac = getStac(url ?? child);
+    if (stac?.isCatalog && typeof stac.getStacLinksWithRel === 'function') {
+      for (const link of stac.getStacLinksWithRel('child')) {
+        const grandUrl = typeof link.getAbsoluteUrl === 'function' ? link.getAbsoluteUrl() : null;
+        if (!grandUrl) {
+          continue;
+        }
+        leaves.push({
+          link: new Link({ href: grandUrl, rel: 'child', title: link.title, type: link.type }),
+          url: grandUrl,
+          stac: getStac(grandUrl),
+          expanded: true
+        });
+      }
+    }
+    else {
+      leaves.push({ link: child, url, stac, expanded: false });
+    }
+  }
+  return leaves;
+}
 
 /**
  * The topic concepts of a collection, as [{id, title}].

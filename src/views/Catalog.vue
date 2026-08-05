@@ -94,7 +94,7 @@ import Utils from '../utils';
 import { hasText, isObject, size } from 'stac-js/src/utils.js';
 import { addSchemaToDocument, createCatalogSchema } from '../schema-org';
 import { ItemCollection, STAC } from 'stac-js';
-import { hasTopic } from '../utils/stlHome';
+import { expandChildren, hasTopic } from '../utils/stlHome';
 import DeprecationMixin from '../components/DeprecationMixin.js';
 import { BCollapse } from 'bootstrap-vue-next';
 import { getIgnoredFields } from '../ignored-metadata.js';
@@ -142,27 +142,31 @@ export default defineComponent({
     ...mapGetters(['catalogs', 'collectionLink', 'getStac', 'isApiChildrenLoading', 'isCollection', 'isRoot', 'items', 'getApiItemsLoading', 'parentLink', 'rootLink']),
     // On the home view the StlHome topic/tag pickers narrow the collection
     // grid; the selection travels in the state query parameters (.topic/.tag)
-    // so filtered views are linkable. Children still loading are excluded
-    // while a filter is active — their topics are not yet known.
+    // so filtered views are linkable. Without a filter the grid shows the
+    // root's own children (the department sub-catalogs); with one active it
+    // switches to the leaf collections one level down — topics and tags live
+    // on the collections, not on the departments. Leaves still loading are
+    // excluded while a filter is active — their topics are not yet known.
     visibleCatalogs() {
       const topic = this.isRoot ? this.stateQueryParameters.topic : null;
       const tag = this.isRoot ? this.stateQueryParameters.tag : null;
       if (!topic && !tag) {
         return this.catalogs;
       }
-      return this.catalogs.filter(child => {
-        const stac = this.getStac(child);
-        if (!(stac instanceof STAC)) {
-          return false;
-        }
-        if (topic && !hasTopic(stac, topic)) {
-          return false;
-        }
-        if (tag && !(Array.isArray(stac.keywords) && stac.keywords.includes(tag))) {
-          return false;
-        }
-        return true;
-      });
+      return expandChildren(this.catalogs, this.getStac)
+        .filter(({ stac }) => {
+          if (!(stac instanceof STAC)) {
+            return false;
+          }
+          if (topic && !hasTopic(stac, topic)) {
+            return false;
+          }
+          if (tag && !(Array.isArray(stac.keywords) && stac.keywords.includes(tag))) {
+            return false;
+          }
+          return true;
+        })
+        .map(({ link }) => link);
     },
     ignoredMetadataFields() {
       return getIgnoredFields(this.data, 'CatalogLike');
