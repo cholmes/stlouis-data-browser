@@ -1,7 +1,7 @@
 <template>
   <div class="stl-home">
     <!-- Hero band, echoing the portal's dark blue hero -->
-    <section class="stl-hero">
+    <section v-if="section !== 'facets'" class="stl-hero">
       <div class="stl-hero-inner">
         <h1>
           {{ heroTitle }}
@@ -17,28 +17,8 @@
       </div>
     </section>
 
-    <!-- Datasets By Topic -->
-    <section v-if="topics.length > 0" class="stl-home-section stl-topics">
-      <h2>Datasets By Topic</h2>
-      <div class="stl-topic-grid">
-        <button
-          v-for="topic in topics" :key="topic.id" type="button"
-          class="stl-topic-card" :class="{ active: topic.id === selectedTopic }"
-          :aria-pressed="topic.id === selectedTopic ? 'true' : 'false'"
-          @click="toggleTopic(topic.id)"
-        >
-          <!-- eslint-disable-next-line vue/no-v-html -- icon markup is a hardcoded constant, see utils/stlHome.js -->
-          <svg class="stl-topic-icon" viewBox="0 0 24 24" aria-hidden="true" v-html="topicIcon(topic.title)" />
-          <span class="stl-topic-body">
-            <span class="stl-topic-name">{{ topic.title }}</span>
-            <span class="stl-topic-caption">{{ topic.collections.join(', ') }}</span>
-          </span>
-        </button>
-      </div>
-    </section>
-
     <!-- Quick Stats -->
-    <section v-if="stats.length > 0" class="stl-home-section stl-stats">
+    <section v-if="section !== 'hero' && stats.length > 0" class="stl-home-section stl-stats">
       <h2>Quick Stats</h2>
       <div class="stl-stat-grid">
         <div v-for="stat in stats" :key="stat.label" class="stl-stat-card">
@@ -48,8 +28,23 @@
       </div>
     </section>
 
+    <!-- Data by Department -->
+    <section v-if="section !== 'hero' && departments.length > 0" class="stl-home-section stl-departments">
+      <h2>Data by Department</h2>
+      <div class="stl-tag-cloud">
+        <button
+          v-for="department in departments" :key="department.id" type="button"
+          class="stl-tag" :class="{ active: department.id === selectedDepartment }"
+          :aria-pressed="department.id === selectedDepartment ? 'true' : 'false'"
+          @click="toggleDepartment(department.id)"
+        >
+          {{ department.title }}<span class="stl-tag-count">{{ department.count }}</span>
+        </button>
+      </div>
+    </section>
+
     <!-- Data by Tag -->
-    <section v-if="tags.length > 0" class="stl-home-section stl-tags">
+    <section v-if="section !== 'hero' && tags.length > 0" class="stl-home-section stl-tags">
       <h2>Data by Tag</h2>
       <div class="stl-tag-cloud">
         <button
@@ -70,13 +65,23 @@ import { defineComponent, defineAsyncComponent } from 'vue';
 import { mapGetters, mapState } from 'vuex';
 import { STAC } from 'stac-js';
 import BIconDatabase from '~icons/bi/database';
-import { collectionTopics, expandChildren, humanFileSize, quickStats, topicIcon } from '../utils/stlHome';
+import { collectionDepartments, expandChildren, humanFileSize, quickStats } from '../utils/stlHome';
 
 export default defineComponent({
   name: 'StlHome',
   components: {
     BIconDatabase,
     Description: defineAsyncComponent(() => import('./Description.vue'))
+  },
+  props: {
+    // The home view leads with the browse grid, which Catalog.vue renders
+    // between two StlHome instances: 'hero' renders the hero band above the
+    // grid, 'facets' the stats/department/tag sections below it. Unset
+    // renders everything (kept for a standalone use).
+    section: {
+      type: String,
+      default: null
+    }
   },
   computed: {
     ...mapState(['data', 'conformsTo', 'stateQueryParameters']),
@@ -111,35 +116,45 @@ export default defineComponent({
         .map(leaf => leaf.stac)
         .filter(stac => stac instanceof STAC);
     },
-    selectedTopic() {
-      return this.stateQueryParameters.topic ?? null;
-    },
     selectedTag() {
       return this.stateQueryParameters.tag ?? null;
     },
-    // Topics aggregated across children, most collections first. Only topics
-    // that actually have collections exist here by construction.
-    topics() {
+    selectedDepartment() {
+      return this.stateQueryParameters.department ?? null;
+    },
+    // Department chips, aggregated across the loaded leaf collections from
+    // the city's departments theme scheme; most collections first.
+    departments() {
       const byId = new Map();
       for (const child of this.children) {
-        const label = child.title || child.id;
-        for (const { id, title } of collectionTopics(child)) {
+        for (const { id, title } of collectionDepartments(child)) {
           if (!byId.has(id)) {
-            byId.set(id, { id, title, collections: [] });
+            byId.set(id, { id, title, count: 0 });
           }
-          byId.get(id).collections.push(label);
+          byId.get(id).count++;
         }
       }
-      return [...byId.values()].sort((a, b) =>
-        (b.collections.length - a.collections.length) || a.title.localeCompare(b.title));
+      return [...byId.values()].sort((a, b) => (b.count - a.count) || a.title.localeCompare(b.title));
     },
     tags() {
+      // Every collection also carries its department as a keyword; the
+      // departments have their own chip row, so keep their names out of the
+      // tag cloud rather than listing them twice.
+      const departmentNames = new Set();
       const counts = new Map();
+      for (const child of this.children) {
+        for (const { title } of collectionDepartments(child)) {
+          departmentNames.add(title);
+        }
+      }
       for (const child of this.children) {
         if (!Array.isArray(child.keywords)) {
           continue;
         }
         for (const keyword of child.keywords) {
+          if (departmentNames.has(keyword)) {
+            continue;
+          }
           counts.set(keyword, (counts.get(keyword) || 0) + 1);
         }
       }
@@ -151,23 +166,23 @@ export default defineComponent({
       if (this.children.length === 0) {
         return [];
       }
-      const { features, styles, bytes } = quickStats(this.children);
-      // Leaves count as collections once known to be one: either loaded as a
-      // collection, or linked from a department sub-catalog (whose children
-      // are its collections). Unloaded top-level children stay uncounted so
-      // department catalogs are never mistaken for collections.
-      const collections = this.leaves
+      const { features, departments, bytes } = quickStats(this.children);
+      // Leaves count as datasets once known to be collections: either loaded
+      // as one, or linked from a topic sub-catalog (whose children are its
+      // collections). Unloaded top-level children stay uncounted so topic
+      // catalogs are never mistaken for datasets.
+      const datasets = this.leaves
         .filter(leaf => leaf.stac?.isCollection || (leaf.expanded && !leaf.stac?.isCatalog))
         .length;
       const stats = [];
-      if (collections > 0) {
-        stats.push({ label: 'Collections', value: collections.toLocaleString() });
+      if (datasets > 0) {
+        stats.push({ label: 'Datasets', value: datasets.toLocaleString() });
       }
       if (features > 0) {
-        stats.push({ label: 'Total features', value: features.toLocaleString() });
+        stats.push({ label: 'Total Rows', value: features.toLocaleString() });
       }
-      if (styles > 0) {
-        stats.push({ label: 'Map styles', value: styles.toLocaleString() });
+      if (departments > 0) {
+        stats.push({ label: 'Departments', value: departments.toLocaleString() });
       }
       const size = humanFileSize(bytes);
       if (bytes > 0 && size) {
@@ -186,7 +201,10 @@ export default defineComponent({
     leaves: {
       immediate: true,
       handler(leaves) {
-        if (!Array.isArray(leaves)) {
+        // Two instances render on the home view (hero above the grid, facets
+        // below it); the hero needs no collection data, so only the other
+        // instance queues.
+        if (this.section === 'hero' || !Array.isArray(leaves)) {
           return;
         }
         // Lazily created: immediate watchers run before the created() hook.
@@ -204,17 +222,16 @@ export default defineComponent({
     }
   },
   methods: {
-    topicIcon,
-    toggleTopic(id) {
-      this.$store.commit('updateState', {
-        type: 'topic',
-        value: this.selectedTopic === id ? null : id
-      });
-    },
     toggleTag(tag) {
       this.$store.commit('updateState', {
         type: 'tag',
         value: this.selectedTag === tag ? null : tag
+      });
+    },
+    toggleDepartment(id) {
+      this.$store.commit('updateState', {
+        type: 'department',
+        value: this.selectedDepartment === id ? null : id
       });
     }
   }
@@ -309,76 +326,6 @@ export default defineComponent({
 
   .stl-home-section {
     margin-bottom: 1.75rem;
-  }
-
-  // ----- Datasets By Topic -----
-  .stl-topic-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 1rem;
-    padding: 0.5rem 0;
-  }
-
-  .stl-topic-card {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.85rem;
-    padding: 1rem;
-    text-align: left;
-    background-color: white;
-    border: 1px solid transparent;
-    border-radius: $border-radius;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-    transition: box-shadow 0.15s ease, border-color 0.15s ease;
-    cursor: pointer;
-
-    &:hover,
-    &:focus-visible {
-      box-shadow: 0 2px 8px rgba($stl-blue, 0.25);
-    }
-
-    &.active {
-      border-color: $stl-blue;
-      box-shadow: inset 0 0 0 1px $stl-blue, 0 2px 8px rgba($stl-blue, 0.25);
-    }
-  }
-
-  .stl-topic-icon {
-    flex-shrink: 0;
-    width: 2.4rem;
-    height: 2.4rem;
-    margin-top: 0.1rem;
-    color: $stl-blue;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.7;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  .stl-topic-body {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    min-width: 0;
-  }
-
-  .stl-topic-name {
-    font-family: $headings-font-family;
-    font-weight: 700;
-    font-size: 1rem;
-    color: $stl-blue;
-  }
-
-  .stl-topic-caption {
-    font-size: 0.78rem;
-    line-height: 1.4;
-    color: $stl-slate;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
   }
 
   // ----- Quick Stats -----

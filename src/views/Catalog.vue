@@ -1,8 +1,10 @@
 <template>
   <div :class="{cc: true, [cssStacType]: true, empty: !hasCatalogs && !hasItems}" :key="data.id">
-    <!-- The root catalog gets the portal-style home: hero, topics, stats,
-         tags. The generic meta column below is hidden in its favour. -->
-    <StlHome v-if="isRoot" />
+    <!-- The root catalog gets the portal-style home. It leads with the
+         browse grid: hero above, then the grid (the row below), then the
+         stats/department/tag sections (the second StlHome instance after the
+         row). The generic meta column is hidden in its favour. -->
+    <StlHome v-if="isRoot" section="hero" />
     <!-- Department sub-catalogs get the home view's Quick Stats treatment,
          scaled down and computed from their child collections. -->
     <StlCatalogStats v-if="!isRoot && !isCollection && catalogs.length > 0" />
@@ -78,6 +80,7 @@
         <WidgetHook id="view-catalog-items-end" />
       </b-col>
     </b-row>
+    <StlHome v-if="isRoot" section="facets" />
   </div>
 </template>
 
@@ -97,7 +100,7 @@ import Utils from '../utils';
 import { hasText, isObject, size } from 'stac-js/src/utils.js';
 import { addSchemaToDocument, createCatalogSchema } from '../schema-org';
 import { ItemCollection, STAC } from 'stac-js';
-import { expandChildren, hasTopic } from '../utils/stlHome';
+import { expandChildren, hasDepartment } from '../utils/stlHome';
 import DeprecationMixin from '../components/DeprecationMixin.js';
 import { BCollapse } from 'bootstrap-vue-next';
 import { getIgnoredFields } from '../ignored-metadata.js';
@@ -144,17 +147,18 @@ export default defineComponent({
   computed: {
     ...mapState(['data', 'apiCatalogPriority', 'apiItemsLink', 'apiItemsPagination', 'apiItemsNumberMatched', 'nextCollectionsLink', 'stateQueryParameters']),
     ...mapGetters(['catalogs', 'collectionLink', 'getStac', 'isApiChildrenLoading', 'isCollection', 'isRoot', 'items', 'getApiItemsLoading', 'parentLink', 'rootLink']),
-    // On the home view the StlHome topic/tag pickers narrow the collection
-    // grid; the selection travels in the state query parameters (.topic/.tag)
-    // so filtered views are linkable. Without a filter the grid shows the
-    // root's own children (the department sub-catalogs); with one active it
-    // switches to the leaf collections one level down — topics and tags live
-    // on the collections, not on the departments. Leaves still loading are
-    // excluded while a filter is active — their topics are not yet known.
+    // On the home view the StlHome tag/department chips narrow the collection
+    // grid; the selection travels in the state query parameters
+    // (.tag/.department) so filtered views are linkable. Without a filter the
+    // grid shows the root's own children (the topic sub-catalogs, which
+    // navigate into their topic); with one active it switches to the leaf
+    // collections one level down — tags and departments live on the
+    // collections, not on the topic catalogs. Leaves still loading are
+    // excluded while a filter is active — their facets are not yet known.
     visibleCatalogs() {
-      const topic = this.isRoot ? this.stateQueryParameters.topic : null;
       const tag = this.isRoot ? this.stateQueryParameters.tag : null;
-      if (!topic && !tag) {
+      const department = this.isRoot ? this.stateQueryParameters.department : null;
+      if (!tag && !department) {
         return this.catalogs;
       }
       return expandChildren(this.catalogs, this.getStac)
@@ -162,10 +166,10 @@ export default defineComponent({
           if (!(stac instanceof STAC)) {
             return false;
           }
-          if (topic && !hasTopic(stac, topic)) {
+          if (tag && !(Array.isArray(stac.keywords) && stac.keywords.includes(tag))) {
             return false;
           }
-          if (tag && !(Array.isArray(stac.keywords) && stac.keywords.includes(tag))) {
+          if (department && !hasDepartment(stac, department)) {
             return false;
           }
           return true;

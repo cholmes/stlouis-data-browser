@@ -3,7 +3,12 @@
     <div class="card-img-wrapper">
       <b-card-img v-if="hasImage" class="thumbnail" v-bind="thumbnail" lazy />
     </div>
-    <b-card-body>
+    <b-card-body :class="{ 'stl-topic-card-body': stlTopicIcon }">
+      <!-- St. Louis fork: catalog cards (the root's topic sub-catalogs)
+           carry their topic's glyph, matched by id, at the left of the
+           title/caption block; see utils/stlHome.js and custom.scss. -->
+      <!-- eslint-disable-next-line vue/no-v-html -- icon markup is a hardcoded constant, see utils/stlHome.js -->
+      <svg v-if="stlTopicIcon" class="stl-card-topic-icon" viewBox="0 0 24 24" aria-hidden="true" v-html="stlTopicIcon" />
       <b-card-title>
         <StacLink :data="[data, catalog]" class="stretched-link" />
       </b-card-title>
@@ -31,6 +36,7 @@ import StacLink from './StacLink.vue';
 import { STAC } from 'stac-js';
 import { formatTemporalExtent } from '@radiantearth/stac-fields/formatters';
 import { BCard, BCardBody, BCardFooter, BCardImg, BCardText, BCardTitle } from 'bootstrap-vue-next';
+import { topicIconForId } from '../utils/stlHome';
 
 export default {
   name: 'Catalog',
@@ -73,6 +79,15 @@ export default {
     },
     data() {
       return this.getStac(this.catalog);
+    },
+    // St. Louis fork: a loaded card that is a catalog — in this tree, one of
+    // the root's topic sub-catalogs — shows its topic glyph (matched by the
+    // catalog id, which is the portal topic slug; database glyph otherwise).
+    stlTopicIcon() {
+      if (this.data?.isCatalog) {
+        return topicIconForId(this.data.id, this.data.title);
+      }
+      return null;
     },
     temporalExtent() {
       if (this.data?.isCollection && this.data.extent?.temporal?.interval.length > 0) {

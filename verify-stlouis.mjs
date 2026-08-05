@@ -170,19 +170,13 @@ else {
   const statCards = await page.locator('.stl-stat-card').count();
   check('quick stats render', statCards >= 1, `${statCards} stat cards`);
 
-  // Topics and tags exist only once the catalog publishes themes/keywords.
-  const topicCards = await page.locator('.stl-topic-card').count();
-  if (topicCards > 0) {
-    check('topic cards render', true, `${topicCards} topics`);
-    await page.locator('.stl-topic-card').first().click();
-    await page.waitForTimeout(600);
-    const filtered = await page.locator('.catalog-card').count();
-    check('topic click filters the grid', filtered > 0 && filtered <= cardCount, `${filtered}/${cardCount} cards`);
-    await page.locator('.stl-topic-card.active').click();
-    await page.waitForTimeout(600);
+  // The topic sub-catalog cards carry their topic glyphs.
+  const topicIcons = await page.locator('.catalog-card .stl-card-topic-icon').count();
+  if (topicIcons > 0) {
+    check('topic cards carry glyphs', true, `${topicIcons} of ${cardCount} cards`);
   }
   else {
-    skip('topic cards render', 'catalog has no themes yet');
+    skip('topic cards carry glyphs', 'no catalog cards loaded as catalogs');
   }
   const tagChips = await page.locator('.stl-tag').count();
   if (tagChips > 0) {
@@ -192,8 +186,14 @@ else {
     skip('tag cloud renders', 'catalog has no keywords yet');
   }
 
-  // Open the first collection and wait for its map.
+  // Open the first card — a topic sub-catalog since the restructure — and,
+  // if it holds no map, descend one more level to its first collection.
   await page.locator('.catalog-card a').first().click();
+  await page.waitForTimeout(2500);
+  if (await page.locator('.maplibregl-map').count() === 0
+      && await page.locator('.catalog-card a').count() > 0) {
+    await page.locator('.catalog-card a').first().click();
+  }
   await page.waitForSelector('.maplibregl-map', { timeout: 30000 }).catch(() => {});
 
   const hasMap = await page.locator('.maplibregl-map').count();

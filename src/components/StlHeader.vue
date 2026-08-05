@@ -242,13 +242,17 @@ export default {
   }
 }
 
+// The BROWSE button copies stlouis-mo.gov's own Search button treatment
+// (screen.css `.site-search input[type="submit"]`): the city's dark blue at
+// rest — flat against the band, as the city's nav buttons sit flat until
+// hovered — turning the hover red with white text.
 .stl-menu {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0 1.5rem;
   border: 0;
-  background-color: $stl-red;
+  background-color: $stl-blue;
   color: white;
   font-size: 0.95rem;
   font-weight: 700;
@@ -257,9 +261,15 @@ export default {
   white-space: nowrap;
 
   &:hover,
-  &:focus {
-    background-color: darken($stl-red, 7%);
+  &:focus-visible {
+    background-color: $stl-red-dark;
     color: white;
+  }
+
+  // Keyboard focus must stay visible on either background.
+  &:focus-visible {
+    outline: 2px solid $stl-light-blue;
+    outline-offset: -3px;
   }
 
   @include media-breakpoint-down(sm) {

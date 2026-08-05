@@ -77,6 +77,49 @@
     font-size: 1.05rem;
   }
 
+  // Topic glyphs (see utils/stlHome.js): single-colour strokes drawn with
+  // currentColor.
+  .stl-card-topic-icon,
+  .stl-title-topic-icon {
+    flex-shrink: 0;
+    color: $stl-blue;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  // A topic catalog card, portal-style: the glyph sits left of the
+  // title/caption block. The icon spans more rows than the card body ever
+  // holds; empty implicit grid rows collapse to nothing.
+  .catalog-card .card-body.stl-topic-card-body {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 0.85rem;
+    align-items: start;
+
+    > * {
+      grid-column: 2;
+      margin-bottom: 0.25rem;
+    }
+
+    > .stl-card-topic-icon {
+      grid-column: 1;
+      grid-row: 1 / span 6;
+      width: 2.4rem;
+      height: 2.4rem;
+      margin-top: 0.15rem;
+    }
+  }
+
+  // In the page-title strip of a topic catalog page, next to the h1. The
+  // strip's .title is a flex row with its own gap, so no margin here.
+  .stl-title-topic-icon {
+    width: 1.9rem;
+    height: 1.9rem;
+  }
+
   .catalog-card .intro {
     color: $stl-slate;
     font-size: 0.875rem;

@@ -50,9 +50,12 @@ export default defineComponent({
         return [];
       }
       const stats = [{ label: 'Datasets', value: this.entries.length.toLocaleString() }];
-      const { features, bytes } = quickStats(this.loaded);
+      const { features, departments, bytes } = quickStats(this.loaded);
       if (features > 0) {
-        stats.push({ label: 'Total features', value: features.toLocaleString() });
+        stats.push({ label: 'Total Rows', value: features.toLocaleString() });
+      }
+      if (departments > 0) {
+        stats.push({ label: 'Departments', value: departments.toLocaleString() });
       }
       const size = humanFileSize(bytes);
       if (bytes > 0 && size) {

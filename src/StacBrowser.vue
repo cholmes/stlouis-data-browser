@@ -23,6 +23,10 @@
         <b-col md="12">
           <div class="title">
             <img v-if="icon && !isRoot" :src="icon.getAbsoluteUrl()" :alt="icon.title" :title="icon.title" class="icon">
+            <!-- St. Louis fork: topic catalog pages carry their topic glyph
+                 next to the title; see utils/stlHome.js. -->
+            <!-- eslint-disable-next-line vue/no-v-html -- icon markup is a hardcoded constant, see utils/stlHome.js -->
+            <svg v-else-if="stlTopicIcon" class="stl-title-topic-icon" viewBox="0 0 24 24" aria-hidden="true" v-html="stlTopicIcon" />
             <h1 :title="title">{{ title }}</h1>
           </div>
           <nav class="actions navigation">
@@ -91,6 +95,7 @@ import StlHeader from './components/StlHeader.vue';
 import { STAC } from 'stac-js';
 import { hasText, isObject, size, URI } from 'stac-js/src/utils.js';
 import Utils from './utils';
+import { topicIconForId } from './utils/stlHome';
 
 import { API_LANGUAGE_CONFORMANCE, updateExternals } from './i18n';
 import { getBest, prepareSupported } from 'stac-js/src/locales';
@@ -236,6 +241,15 @@ export default defineComponent({
     },
     icon() {
       return Utils.getIcon(this.data);
+    },
+    // St. Louis fork: a non-root catalog page — one of the root's topic
+    // sub-catalogs in this tree — shows its topic glyph next to the title
+    // (matched by the catalog id, which is the portal topic slug).
+    stlTopicIcon() {
+      if (!this.isRoot && this.data?.isCatalog) {
+        return topicIconForId(this.data.id, this.data.title);
+      }
+      return null;
     }
   },
   watch: {

@@ -11,6 +11,7 @@
 import { Link } from 'stac-js';
 
 export const TOPIC_SCHEME = 'https://www.stlouis-mo.gov/data/topics/';
+export const DEPARTMENT_SCHEME = 'https://www.stlouis-mo.gov/government/departments/';
 
 /**
  * Expands the root catalog's children one level into leaf entries.
@@ -64,25 +65,12 @@ export function expandChildren(children, getStac) {
 }
 
 /**
- * The topic concepts of a collection, as [{id, title}].
+ * The concepts of the given themes, as deduplicated [{id, title}].
  *
- * Prefers concepts from themes with the portal's topic scheme; if no theme
- * declares that scheme, falls back to all concepts so a scheme-less catalog
- * still groups. Concepts without both id and title are dropped; a missing id
- * falls back to a slug of the title and vice versa.
- *
- * @param {Object} stac A STAC collection (or any object).
- * @returns {Array.<{id: string, title: string}>}
+ * Concepts without both id and title are dropped; a missing id falls back to
+ * a slug of the title and vice versa.
  */
-export function collectionTopics(stac) {
-  const themes = stac?.themes;
-  if (!Array.isArray(themes)) {
-    return [];
-  }
-  let pools = themes.filter(t => t?.scheme === TOPIC_SCHEME);
-  if (pools.length === 0) {
-    pools = themes;
-  }
+function readConcepts(pools) {
   const topics = [];
   const seen = new Set();
   for (const theme of pools) {
@@ -114,6 +102,47 @@ export function collectionTopics(stac) {
 }
 
 /**
+ * The topic concepts of a collection, as [{id, title}].
+ *
+ * Prefers concepts from themes with the portal's topic scheme; if no theme
+ * declares that scheme, falls back to all concepts so a scheme-less catalog
+ * still groups. Since the catalog's restructure the topic slug ids double as
+ * the ids of the root's topic sub-catalogs.
+ *
+ * @param {Object} stac A STAC collection (or any object).
+ * @returns {Array.<{id: string, title: string}>}
+ */
+export function collectionTopics(stac) {
+  const themes = stac?.themes;
+  if (!Array.isArray(themes)) {
+    return [];
+  }
+  let pools = themes.filter(t => t?.scheme === TOPIC_SCHEME);
+  if (pools.length === 0) {
+    pools = themes;
+  }
+  return readConcepts(pools);
+}
+
+/**
+ * The department concepts of a collection, as [{id, title}].
+ *
+ * Strictly reads themes with the city's departments scheme — unlike topics
+ * there is no fallback, so a catalog without department themes simply has no
+ * department facet.
+ *
+ * @param {Object} stac A STAC collection (or any object).
+ * @returns {Array.<{id: string, title: string}>}
+ */
+export function collectionDepartments(stac) {
+  const themes = stac?.themes;
+  if (!Array.isArray(themes)) {
+    return [];
+  }
+  return readConcepts(themes.filter(t => t?.scheme === DEPARTMENT_SCHEME));
+}
+
+/**
  * True when the collection is assigned to the given topic (by id or title).
  */
 export function hasTopic(stac, topic) {
@@ -121,40 +150,55 @@ export function hasTopic(stac, topic) {
 }
 
 /**
- * Aggregates the quick-stat totals across loaded collections: features from
- * `table:row_count`, style count from style-role assets, and the data size
- * from data/visual asset `file:size`. Both the home view and the department
- * catalog pages read their stat rows from this.
+ * True when the collection belongs to the given department (by id or title).
+ */
+export function hasDepartment(stac, department) {
+  return collectionDepartments(stac).some(d => d.id === department || d.title === department);
+}
+
+/**
+ * Aggregates the quick-stat totals across loaded collections: rows from
+ * `table:row_count` (shown as "Total Rows"), the count of distinct
+ * departments from the departments theme scheme, and the data size from
+ * data/visual asset `file:size`. Both the home view and the topic catalog
+ * pages read their stat rows from this.
+ *
+ * Departments are counted by distinct concept title. (Every collection also
+ * carries its department as a keyword, but a bare keyword is
+ * indistinguishable from a tag, so a collection without the scheme simply
+ * contributes no department.)
  *
  * Defensive: entries without the fields simply contribute nothing, so the
  * totals build up as collections load.
  *
  * @param {Array} children Loaded STAC collections (or any objects).
- * @returns {{features: number, styles: number, bytes: number}}
+ * @returns {{features: number, departments: number, bytes: number}}
  */
 export function quickStats(children) {
-  const totals = { features: 0, styles: 0, bytes: 0 };
+  const totals = { features: 0, departments: 0, bytes: 0 };
   if (!Array.isArray(children)) {
     return totals;
   }
+  const departments = new Set();
   for (const child of children) {
     const rows = child?.['table:row_count'];
     if (Number.isFinite(rows)) {
       totals.features += rows;
     }
+    for (const { title } of collectionDepartments(child)) {
+      departments.add(title);
+    }
     const assets = child?.assets;
     if (assets && typeof assets === 'object') {
       for (const asset of Object.values(assets)) {
         const roles = Array.isArray(asset?.roles) ? asset.roles : [];
-        if (roles.includes('style')) {
-          totals.styles++;
-        }
         if ((roles.includes('data') || roles.includes('visual')) && Number.isFinite(asset?.['file:size'])) {
           totals.bytes += asset['file:size'];
         }
       }
     }
   }
+  totals.departments = departments.size;
   return totals;
 }
 
@@ -209,6 +253,22 @@ const ICON_MATCHERS = [
   [/transportation|infrastructure|utilit|street/, 'road'],
 ];
 
+// The portal's topic slugs — the ids of the root's topic sub-catalogs since
+// the catalog restructure — mapped straight to their glyphs.
+const TOPIC_SLUG_ICONS = {
+  'urban-development-and-planning': 'map',
+  'government': 'dome',
+  'housing': 'house',
+  'business-and-industry': 'briefcase',
+  'transportation-infrastructure-and-utilities': 'road',
+  'law-safety-and-justice': 'shield',
+  'environment': 'leaf',
+  'leisure-and-culture': 'tree',
+  'health': 'cross',
+  'community': 'people',
+  'education-and-training': 'gradcap',
+};
+
 /**
  * Inner SVG markup for a topic's icon; a database glyph when nothing matches.
  */
@@ -220,4 +280,18 @@ export function topicIcon(title) {
     }
   }
   return ICONS.database;
+}
+
+/**
+ * Inner SVG markup for a topic catalog's icon, matched by its id (the portal
+ * topic slug). Unknown ids fall back to pattern-matching the title (or the id
+ * itself), and finally to the database glyph — so department or other
+ * non-topic catalogs still get a sensible mark.
+ */
+export function topicIconForId(id, title) {
+  const icon = ICONS[TOPIC_SLUG_ICONS[id]];
+  if (icon) {
+    return icon;
+  }
+  return topicIcon(typeof title === 'string' && title.length > 0 ? title : id);
 }

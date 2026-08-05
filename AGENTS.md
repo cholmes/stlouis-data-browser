@@ -19,7 +19,7 @@ Change these; leave the rest of the tree matching upstream so `git pull upstream
 | `config.js` | Catalog URL, title, locales, footer links |
 | `basemaps.config.js` | The three basemaps and `MAP_CONSTRAINTS` (bounds, zoom limits, home view) |
 | `src/components/StlHeader.vue` | The white wordmark bar, the blue action band, the MENU button |
-| `src/components/StlHome.vue` + `src/utils/stlHome.js` | The portal-style home: hero, Datasets By Topic, Quick Stats, Data by Tag |
+| `src/components/StlHome.vue` + `src/utils/stlHome.js` | The portal-style home: hero, Quick Stats, Data by Department, Data by Tag |
 | `src/theme/variables.scss` | The palette and fonts, as Sass variables |
 | `src/theme/custom.scss` | Component-level styling, referencing those variables |
 | `index.html` | Favicon, font link, meta tags |
@@ -35,15 +35,21 @@ title and the catalog-stats trigger there), and carries the footer disclaimer;
 selected topic/tag; `src/components/maps/MapMixin.js` spreads `MAP_CONSTRAINTS` into the MapLibre
 constructor.
 
-The home view reads the portal's own metadata off the leaf collections: topics from the STAC
-Themes extension (`themes[].concepts` under the scheme `https://www.stlouis-mo.gov/data/topics/`),
-tags from `keywords`, and the Quick Stats from `table:row_count` and asset `file:size`/roles. The
-catalog nests one level — root → department sub-catalogs → collections — so `expandChildren` in
-`src/utils/stlHome.js` expands each loaded child catalog into its child collections (a child that
-is itself a collection is used directly, so a flat catalog keeps working). The topic/tag selection
-travels in the state query parameters (`#/?.topic=<slug>`, `#/?.tag=<tag>`), so filtered views are
-linkable; without a filter the root grid shows the department cards, with one active it switches
-to the matching leaf collections. Sections whose data is absent simply do not render — the accessors in
+The home view reads the portal's own metadata off the catalog: the root's children are the
+portal's eleven topic sub-catalogs (ids are the topic slugs, titles the topic names, descriptions
+the portal captions), and each leaf collection carries topics from the STAC Themes extension
+(`themes[].concepts` under the scheme `https://www.stlouis-mo.gov/data/topics/`), its owning
+department under the scheme `https://www.stlouis-mo.gov/government/departments/` (also duplicated
+as a keyword), tags from `keywords`, and the Quick Stats fields `table:row_count` and asset
+`file:size`/roles. The catalog nests one level — root → topic sub-catalogs → collections — so
+`expandChildren` in `src/utils/stlHome.js` expands each loaded child catalog into its child
+collections (a child that is itself a collection is used directly, so a flat catalog keeps
+working). The topic cards navigate into their topic catalog (topics are structural); the tag and
+department chips filter the home grid in place, and that selection travels in the state query
+parameters (`#/?.tag=<tag>`, `#/?.department=<slug>`, plus the legacy `#/?.topic=<slug>`), so
+filtered views are linkable. Department names are kept out of the tag cloud — they have their own
+chip row. Topic glyphs (`topicIconForId`) also mark the topic catalog cards in the browse grid and
+the topic pages' title strip. Sections whose data is absent simply do not render — the accessors in
 `src/utils/stlHome.js` are defensive, and `tests/unit/stlHome.spec.js` pins that down.
 
 ## Brand Facts

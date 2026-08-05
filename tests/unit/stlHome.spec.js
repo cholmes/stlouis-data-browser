@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { Catalog, Collection } from 'stac-js';
-import { collectionTopics, expandChildren, hasTopic, humanFileSize, quickStats, topicIcon, TOPIC_SCHEME } from '../../src/utils/stlHome.js';
+import {
+  collectionDepartments, collectionTopics, expandChildren, hasDepartment, hasTopic,
+  humanFileSize, quickStats, topicIcon, topicIconForId, DEPARTMENT_SCHEME, TOPIC_SCHEME
+} from '../../src/utils/stlHome.js';
 
 // The shape the St. Louis catalog publishes (STAC Themes extension).
 const themed = (concepts, scheme = TOPIC_SCHEME) => ({ themes: [{ scheme, concepts }] });
@@ -64,6 +67,55 @@ describe('stlHome', () => {
       ['concept without id and title', { themes: [{ scheme: TOPIC_SCHEME, concepts: [{}] }] }]
     ])('returns [] for malformed input: %s', (_, stac) => {
       expect(collectionTopics(stac)).toEqual([]);
+    });
+  });
+
+  describe('collectionDepartments', () => {
+    // The live shape: topic themes and department themes side by side, and
+    // the department name duplicated as a keyword.
+    const wards = {
+      themes: [
+        { scheme: TOPIC_SCHEME, concepts: [
+          { id: 'government', title: 'Government' },
+          { id: 'urban-development-and-planning', title: 'Urban Development and Planning' }
+        ] },
+        { scheme: DEPARTMENT_SCHEME, concepts: [
+          { id: 'planning-and-urban-design', title: 'Planning and Urban Design' }
+        ] }
+      ],
+      keywords: ['Planning and Urban Design']
+    };
+
+    it('reads concepts from the departments scheme only', () => {
+      expect(collectionDepartments(wards)).toEqual([
+        { id: 'planning-and-urban-design', title: 'Planning and Urban Design' }
+      ]);
+    });
+
+    it('does not fall back to other schemes', () => {
+      const topicOnly = themed([{ id: 'government', title: 'Government' }]);
+      expect(collectionDepartments(topicOnly)).toEqual([]);
+    });
+
+    it.each([
+      ['no themes', {}],
+      ['null', null],
+      ['themes not an array', { themes: 'Assessor' }]
+    ])('returns [] for malformed input: %s', (_, stac) => {
+      expect(collectionDepartments(stac)).toEqual([]);
+    });
+
+    describe('hasDepartment', () => {
+      it('matches by id and by title', () => {
+        expect(hasDepartment(wards, 'planning-and-urban-design')).toBe(true);
+        expect(hasDepartment(wards, 'Planning and Urban Design')).toBe(true);
+      });
+
+      it('rejects other departments, topics and empty objects', () => {
+        expect(hasDepartment(wards, 'assessor-s-office')).toBe(false);
+        expect(hasDepartment(wards, 'government')).toBe(false);
+        expect(hasDepartment({}, 'parks')).toBe(false);
+      });
     });
   });
 
@@ -168,6 +220,59 @@ describe('stlHome', () => {
     ])('returns [] for malformed input: %s', (_, entries, resolver) => {
       expect(expandChildren(entries, resolver)).toEqual([]);
     });
+
+    describe('over the restructured topic tree', () => {
+      // A miniature of the restructured catalog: root → topic sub-catalogs
+      // (ids are the portal topic slugs) → collections, each collection
+      // carrying topic and department themes. The live tree holds 11 topics
+      // and 51 collections; three topics stand in for them here.
+      const TOPICS = {
+        'government': ['wards', 'polling-places'],
+        'environment': ['forest-park-trees'],
+        'urban-development-and-planning': ['parcels', 'zoning', 'city-blocks']
+      };
+      const topicRoot = new Catalog(
+        catalogJson('st-louis-open-data-mirror', Object.keys(TOPICS).map(slug => `./${slug}/catalog.json`)),
+        `${BASE}catalog.json`
+      );
+      const database = {};
+      for (const [slug, ids] of Object.entries(TOPICS)) {
+        database[`${BASE}${slug}/catalog.json`] = new Catalog(
+          catalogJson(slug, ids.map(id => `./${id}/collection.json`)),
+          `${BASE}${slug}/catalog.json`
+        );
+        for (const id of ids) {
+          const json = collectionJson(`${slug}/${id}`);
+          json['table:row_count'] = 100;
+          json.themes = [
+            { scheme: TOPIC_SCHEME, concepts: [{ id: slug, title: slug }] },
+            { scheme: DEPARTMENT_SCHEME, concepts: [{ id: `dept-of-${slug}`, title: `Dept of ${slug}` }] }
+          ];
+          json.assets = {
+            data: { href: `./${id}.parquet`, roles: ['data'], 'file:size': 1000 },
+            'styles/default': { href: './styles/default.json', roles: ['style'] }
+          };
+          database[`${BASE}${slug}/${id}/collection.json`] =
+            new Collection(json, `${BASE}${slug}/${id}/collection.json`);
+        }
+      }
+      const resolve = source => (typeof source === 'string' ? database[source] : null) ?? null;
+      const leaves = expandChildren(topicRoot.getStacLinksWithRel('child'), resolve);
+
+      it('expands every topic catalog into its collections', () => {
+        expect(leaves).toHaveLength(6);
+        expect(leaves.every(leaf => leaf.expanded)).toBe(true);
+        expect(leaves.every(leaf => leaf.stac?.isCollection)).toBe(true);
+      });
+
+      it('feeds quickStats the full set of collections', () => {
+        expect(quickStats(leaves.map(leaf => leaf.stac))).toEqual({
+          features: 600,
+          departments: 3, // one department per topic in this miniature
+          bytes: 6000
+        });
+      });
+    });
   });
 
   describe('hasTopic', () => {
@@ -188,10 +293,11 @@ describe('stlHome', () => {
   });
 
   describe('quickStats', () => {
-    // The shape the St. Louis collections publish: table:row_count on the
-    // collection, file:size and roles on the assets.
+    // The shape the St. Louis collections publish: table:row_count and the
+    // departments theme on the collection, file:size and roles on the assets.
     const parcels = {
       'table:row_count': 134362,
+      themes: [{ scheme: DEPARTMENT_SCHEME, concepts: [{ id: 'assessor-s-office', title: "Assessor's Office" }] }],
       assets: {
         parcels: { roles: ['data'], 'file:size': 31354481 },
         'parcels-tiles': { roles: ['visual'], 'file:size': 36066850 },
@@ -202,15 +308,16 @@ describe('stlHome', () => {
     };
     const sales = {
       'table:row_count': 250000,
+      themes: [{ scheme: DEPARTMENT_SCHEME, concepts: [{ id: 'assessor-s-office', title: "Assessor's Office" }] }],
       assets: {
         sales: { roles: ['data'], 'file:size': 5000000 }
       }
     };
 
-    it('sums rows, styles and data/visual asset sizes across collections', () => {
+    it('sums rows and data/visual asset sizes, counts distinct departments', () => {
       expect(quickStats([parcels, sales])).toEqual({
         features: 384362,
-        styles: 2,
+        departments: 1, // both collections belong to the Assessor's Office
         bytes: 72421331
       });
     });
@@ -221,12 +328,20 @@ describe('stlHome', () => {
     });
 
     it('builds up as collections load: partial input still counts', () => {
-      expect(quickStats([sales])).toEqual({ features: 250000, styles: 0, bytes: 5000000 });
+      expect(quickStats([sales])).toEqual({ features: 250000, departments: 1, bytes: 5000000 });
     });
 
     it('contributes nothing for collections without the fields', () => {
       const bare = [{}, { assets: {} }, { 'table:row_count': 'many' }, null];
-      expect(quickStats(bare)).toEqual({ features: 0, styles: 0, bytes: 0 });
+      expect(quickStats(bare)).toEqual({ features: 0, departments: 0, bytes: 0 });
+    });
+
+    it('does not count topic concepts or bare keywords as departments', () => {
+      const topicOnly = {
+        themes: [{ scheme: TOPIC_SCHEME, concepts: [{ id: 'government', title: 'Government' }] }],
+        keywords: ['Forestry']
+      };
+      expect(quickStats([topicOnly]).departments).toBe(0);
     });
 
     it('ignores assets without numeric sizes or roles', () => {
@@ -237,12 +352,12 @@ describe('stlHome', () => {
           c: { 'file:size': 9000 }                      // no roles
         }
       };
-      expect(quickStats([odd])).toEqual({ features: 0, styles: 0, bytes: 0 });
+      expect(quickStats([odd])).toEqual({ features: 0, departments: 0, bytes: 0 });
     });
 
     it('returns zeros for malformed input', () => {
-      expect(quickStats(null)).toEqual({ features: 0, styles: 0, bytes: 0 });
-      expect(quickStats('nope')).toEqual({ features: 0, styles: 0, bytes: 0 });
+      expect(quickStats(null)).toEqual({ features: 0, departments: 0, bytes: 0 });
+      expect(quickStats('nope')).toEqual({ features: 0, departments: 0, bytes: 0 });
     });
   });
 
@@ -286,6 +401,39 @@ describe('stlHome', () => {
     it('falls back to the database glyph', () => {
       expect(topicIcon('Something Else')).toContain('ellipse');
       expect(topicIcon(undefined)).toContain('ellipse');
+    });
+  });
+
+  describe('topicIconForId', () => {
+    // The restructured catalog's topic sub-catalog ids ARE the portal topic
+    // slugs; each maps straight to its glyph.
+    it.each([
+      ['urban-development-and-planning', 'M1 6v16'],                  // map
+      ['government', 'M5 13a7 7'],                                    // dome
+      ['housing', 'M3 9l9-7'],                                        // house
+      ['business-and-industry', 'rect x="2" y="7"'],                  // briefcase
+      ['transportation-infrastructure-and-utilities', 'M4 22L10 2'],  // road
+      ['law-safety-and-justice', 'M12 22s8-4'],                       // shield
+      ['environment', 'M11 20A7 7'],                                  // leaf
+      ['leisure-and-culture', 'M12 2L6 10'],                          // tree
+      ['health', 'M12 8v8'],                                          // cross
+      ['community', 'circle cx="9" cy="7"'],                          // people
+      ['education-and-training', 'M22 9L12 4']                        // grad cap
+    ])('maps the topic slug "%s"', (id, marker) => {
+      expect(topicIconForId(id)).toContain(marker);
+    });
+
+    it('falls back to pattern-matching the title for unknown ids', () => {
+      expect(topicIconForId('some-dept', 'Parks and Recreation')).toContain('M12 2L6 10'); // tree
+    });
+
+    it('falls back to pattern-matching the id itself without a title', () => {
+      expect(topicIconForId('police-department')).toContain('M12 22s8-4'); // shield
+    });
+
+    it('lands on the database glyph when nothing matches', () => {
+      expect(topicIconForId('assessor-s-office')).toContain('ellipse');
+      expect(topicIconForId(undefined)).toContain('ellipse');
     });
   });
 });
