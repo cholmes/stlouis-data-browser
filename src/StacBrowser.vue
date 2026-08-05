@@ -17,19 +17,13 @@
         @log-in-out="logInOut"
         @set-locale="locale => switchLocale({locale, userSelected: true})"
       />
-      <b-row class="page" v-if="!loading">
+      <!-- On the home view (root catalog) StlHome's hero carries the title
+           and the catalog-stats trigger, so the page-title strip yields. -->
+      <b-row class="page" v-if="!loading && !isHome">
         <b-col md="12">
           <div class="title">
             <img v-if="icon && !isRoot" :src="icon.getAbsoluteUrl()" :alt="icon.title" :title="icon.title" class="icon">
             <h1 :title="title">{{ title }}</h1>
-            <!-- The catalog-stats popover used to hang off the site title. That
-                 title now lives in the StlHeader bar, so the trigger moves here. -->
-            <b-button
-              v-if="root && isRoot" size="sm" variant="outline-primary" id="popover-root-btn"
-              :title="serviceType" tabindex="0"
-            >
-              <b-icon-database /><span class="button-label">{{ serviceType }}</span>
-            </b-button>
           </div>
           <nav class="actions navigation">
             <b-button-group>
@@ -176,6 +170,11 @@ export default defineComponent({
     },
     isSearchPage() {
       return this.$route.name === 'search';
+    },
+    isHome() {
+      // The root catalog, successfully loaded. Errors (data is null) keep the
+      // normal page strip so the "Error" title has somewhere to live.
+      return Boolean(this.isRoot && this.data && this.data.isCatalogLike);
     },
     isServerSelector() {
       return this.$route.name === 'select';

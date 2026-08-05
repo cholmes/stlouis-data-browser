@@ -114,7 +114,8 @@ const type = await page.evaluate(() => {
   const b = getComputedStyle(document.body);
   const h1 = document.querySelector('h1');
   const content = [...document.querySelectorAll('a')].find(a =>
-    a.innerText.trim().length > 3 && !a.closest('.maplibregl-map') && !a.closest('header') && !a.className.includes('btn'));
+    a.innerText.trim().length > 3 && !a.closest('.maplibregl-map') && !a.closest('header')
+    && !a.closest('.stl-hero') && !a.className.includes('btn')); // hero links are white-on-blue by design
   const c = content ? getComputedStyle(content) : null;
   return {
     bodyFont: b.fontFamily, bodyColor: b.color, bodyBg: b.backgroundColor,
@@ -156,6 +157,40 @@ else {
 
   const cardCount = await page.locator('.catalog-card').count();
   check('collections listed', cardCount > 0, `${cardCount} cards`);
+
+  // ---------- 3a. Home view (hero, stats, topics, tags) ----------
+  const hero = await page.evaluate(() => {
+    const el = document.querySelector('.stl-hero');
+    return el && { bg: getComputedStyle(el).backgroundColor, h1: el.querySelector('h1')?.innerText.trim() };
+  });
+  check('hero band renders on #1E526B', hero?.bg === 'rgb(30, 82, 107)', hero ? `${hero.bg} — ${hero.h1}` : 'no .stl-hero');
+
+  // Children stream in through the background loader; give the stats a moment.
+  await page.waitForSelector('.stl-stat-card', { timeout: 20000 }).catch(() => {});
+  const statCards = await page.locator('.stl-stat-card').count();
+  check('quick stats render', statCards >= 1, `${statCards} stat cards`);
+
+  // Topics and tags exist only once the catalog publishes themes/keywords.
+  const topicCards = await page.locator('.stl-topic-card').count();
+  if (topicCards > 0) {
+    check('topic cards render', true, `${topicCards} topics`);
+    await page.locator('.stl-topic-card').first().click();
+    await page.waitForTimeout(600);
+    const filtered = await page.locator('.catalog-card').count();
+    check('topic click filters the grid', filtered > 0 && filtered <= cardCount, `${filtered}/${cardCount} cards`);
+    await page.locator('.stl-topic-card.active').click();
+    await page.waitForTimeout(600);
+  }
+  else {
+    skip('topic cards render', 'catalog has no themes yet');
+  }
+  const tagChips = await page.locator('.stl-tag').count();
+  if (tagChips > 0) {
+    check('tag cloud renders', true, `${tagChips} tags`);
+  }
+  else {
+    skip('tag cloud renders', 'catalog has no keywords yet');
+  }
 
   // Open the first collection and wait for its map.
   await page.locator('.catalog-card a').first().click();

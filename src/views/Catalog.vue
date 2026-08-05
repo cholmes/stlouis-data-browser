@@ -1,5 +1,8 @@
 <template>
   <div :class="{cc: true, [cssStacType]: true, empty: !hasCatalogs && !hasItems}" :key="data.id">
+    <!-- The root catalog gets the portal-style home: hero, topics, stats,
+         tags. The generic meta column below is hidden in its favour. -->
+    <StlHome v-if="isRoot" />
     <section v-if="isCollection" class="hero-map">
       <MapView
         ref="mapView" :stac="data" v-bind="mapData" @changed="dataChanged"
@@ -8,7 +11,7 @@
       />
     </section>
     <b-row>
-      <b-col class="meta">
+      <b-col class="meta" v-if="!isRoot">
         <WidgetHook id="view-catalog-meta-start" />
         <section class="intro">
           <h2>{{ $t('description') }}</h2>
@@ -52,7 +55,7 @@
       <b-col class="catalogs-container" v-if="hasCatalogs">
         <WidgetHook id="view-catalog-catalogs-start" />
         <Catalogs
-          :apiSearch="hasApiCollections" :catalogs="catalogs" :hasMore="hasMore"
+          :apiSearch="hasApiCollections" :catalogs="visibleCatalogs" :hasMore="hasMore"
           @load-more="loadMoreCollections" @search="searchCollections"
           :loading="Boolean(loadingCollections) || loadingNextCollectionsPage" :loadingMore="loadingCollections === 'more' || loadingNextCollectionsPage"
         />
@@ -90,7 +93,8 @@ import BIconChevronUp from '~icons/bi/chevron-up';
 import Utils from '../utils';
 import { hasText, isObject, size } from 'stac-js/src/utils.js';
 import { addSchemaToDocument, createCatalogSchema } from '../schema-org';
-import { ItemCollection } from 'stac-js';
+import { ItemCollection, STAC } from 'stac-js';
+import { hasTopic } from '../utils/stlHome';
 import DeprecationMixin from '../components/DeprecationMixin.js';
 import { BCollapse } from 'bootstrap-vue-next';
 import { getIgnoredFields } from '../ignored-metadata.js';
@@ -115,6 +119,7 @@ export default defineComponent({
     MetadataGroups: defineAsyncComponent(() => import('../components/MetadataGroups.vue')),
     Providers: defineAsyncComponent(() => import('../components/Providers.vue')),
     ReadMore,
+    StlHome: defineAsyncComponent(() => import('../components/StlHome.vue')),
     Thumbnails: defineAsyncComponent(() => import('../components/Thumbnails.vue')),
     ParquetViewer: defineAsyncComponent(() => import('../components/ParquetViewer.vue'))
   },
@@ -134,7 +139,31 @@ export default defineComponent({
   },
   computed: {
     ...mapState(['data', 'apiCatalogPriority', 'apiItemsLink', 'apiItemsPagination', 'apiItemsNumberMatched', 'nextCollectionsLink', 'stateQueryParameters']),
-    ...mapGetters(['catalogs', 'collectionLink', 'isApiChildrenLoading', 'isCollection', 'items', 'getApiItemsLoading', 'parentLink', 'rootLink']),
+    ...mapGetters(['catalogs', 'collectionLink', 'getStac', 'isApiChildrenLoading', 'isCollection', 'isRoot', 'items', 'getApiItemsLoading', 'parentLink', 'rootLink']),
+    // On the home view the StlHome topic/tag pickers narrow the collection
+    // grid; the selection travels in the state query parameters (.topic/.tag)
+    // so filtered views are linkable. Children still loading are excluded
+    // while a filter is active — their topics are not yet known.
+    visibleCatalogs() {
+      const topic = this.isRoot ? this.stateQueryParameters.topic : null;
+      const tag = this.isRoot ? this.stateQueryParameters.tag : null;
+      if (!topic && !tag) {
+        return this.catalogs;
+      }
+      return this.catalogs.filter(child => {
+        const stac = this.getStac(child);
+        if (!(stac instanceof STAC)) {
+          return false;
+        }
+        if (topic && !hasTopic(stac, topic)) {
+          return false;
+        }
+        if (tag && !(Array.isArray(stac.keywords) && stac.keywords.includes(tag))) {
+          return false;
+        }
+        return true;
+      });
+    },
     ignoredMetadataFields() {
       return getIgnoredFields(this.data, 'CatalogLike');
     },

@@ -11,7 +11,7 @@ VOICE.md, the issue templates — do not apply here. What follows does.
 
 ## Where the Customization Lives
 
-Everything that makes this a St. Louis browser rather than a generic one sits in seven places.
+Everything that makes this a St. Louis browser rather than a generic one sits in eight places.
 Change these; leave the rest of the tree matching upstream so `git pull upstream main` stays cheap.
 
 | File | Owns |
@@ -19,6 +19,7 @@ Change these; leave the rest of the tree matching upstream so `git pull upstream
 | `config.js` | Catalog URL, title, locales, footer links |
 | `basemaps.config.js` | The three basemaps and `MAP_CONSTRAINTS` (bounds, zoom limits, home view) |
 | `src/components/StlHeader.vue` | The white wordmark bar, the blue action band, the MENU button |
+| `src/components/StlHome.vue` + `src/utils/stlHome.js` | The portal-style home: hero, Datasets By Topic, Quick Stats, Data by Tag |
 | `src/theme/variables.scss` | The palette and fonts, as Sass variables |
 | `src/theme/custom.scss` | Component-level styling, referencing those variables |
 | `index.html` | Favicon, font link, meta tags |
@@ -28,8 +29,18 @@ Brand values have exactly one home: the `$stl-*` variables in `variables.scss`. 
 literals into components.
 
 Small supporting edits ride along with those files: `src/StacBrowser.vue` mounts `StlHeader` in
-place of upstream's `.site` row (and carries the footer disclaimer), and
-`src/components/maps/MapMixin.js` spreads `MAP_CONSTRAINTS` into the MapLibre constructor.
+place of upstream's `.site` row, hides the page-title strip on the home view (the hero carries the
+title and the catalog-stats trigger there), and carries the footer disclaimer;
+`src/views/Catalog.vue` mounts `StlHome` on the root catalog and filters the collection grid by the
+selected topic/tag; `src/components/maps/MapMixin.js` spreads `MAP_CONSTRAINTS` into the MapLibre
+constructor.
+
+The home view reads the portal's own metadata off each child collection: topics from the STAC
+Themes extension (`themes[].concepts` under the scheme `https://www.stlouis-mo.gov/data/topics/`),
+tags from `keywords`, and the Quick Stats from `table:row_count` and asset `file:size`/roles. The
+topic/tag selection travels in the state query parameters (`#/?.topic=<slug>`, `#/?.tag=<tag>`), so
+filtered views are linkable. Sections whose data is absent simply do not render — the accessors in
+`src/utils/stlHome.js` are defensive, and `tests/unit/stlHome.spec.js` pins that down.
 
 ## Brand Facts
 
